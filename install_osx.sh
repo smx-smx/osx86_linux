@@ -292,9 +292,12 @@ user=$4
 virtualdev=0
 vbhdd=0
 
+if [[ ! "$OSTYPE" == linux* ]]; then
+	err_exit "This script can only be run under Linux"
+fi
+
 if [ "$(id -u)" != "0" ]; then
    err_exit "This script must be run as root\n"
-   exit 1
 fi
 
 if [ -z $commands_checked ]; then	commands_checked=0; fi
