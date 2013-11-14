@@ -13,19 +13,21 @@ TODO: Beautify the code. Remove ugly parts
 Should work with:
  OSX 10.6, 10.7, 10.8, 10.9
 
-Required files:
+Files list
 "chameleon" directory
--boot
--boot0
--boot1h
+	boot
+	boot0
+	boot1h
 
 "extra_kexts" directory
--FakeSMC.kext
--<any other kext> (NullCPUPowerManagement, ps2 controller, ...)
+	FakeSMC.kext
+	<any other kext> (NullCPUPowerManagement, ps2 controller, ...)
 
 "osinstall_mbr" directory (optional fpr MBR patch)"
--OSInstall
--OSInstall.mpkg
+	OSInstall
+	OSInstall.mpkg
+
+smbios.plist in script directory (for Lion/Mountain Lion/Maverics)
 
 see ./install_osx.sh -h for usage
 

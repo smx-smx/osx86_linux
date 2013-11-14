@@ -20,6 +20,9 @@ white='printf \033[01;37m'
 debug=1
 trap err_exit SIGINT
 
+dmgimgversion="1.6.5"
+xarver="1.5.2"
+
 function pause() {
    $white; read -p "$*"; $normal
 }
@@ -124,10 +127,7 @@ case "$choice" in
 		err_exit ""
 		;;
 	6)
-		echo "Deleting Kext Cache..."
-		if [ -f /mnt/osx/target/System/Library/Caches/kernelcache ]; then
-			rm /mnt/osx/target/System/Library/Caches/kernelcache
-		fi
+		do_remcache
 		err_exit ""
 		;;
 	*)
@@ -163,7 +163,7 @@ printf "Choose a kext to Install / Reinstall: "
 	local name="kext$choice"
 	#echo "${!name}"
 	#eval echo \$kext$choice
-	if [ $choice == 0 ]; then
+	if [ "$choice" == "0" ]; then
 		clear
 		mediamenu
 	fi
@@ -282,7 +282,7 @@ done
 
 ##File Details
 #name --> filename.extension
-#extension --> zip, tar, md5
+#extension --> ".img", ".tar", ".dmg",..
 #filename --> filename without extension
 file=$1
 dev=$2
@@ -305,6 +305,22 @@ if [ $commands_checked == 0 ]; then
 	check_commands	#Check all required commands exist
 	commands_checked=1
 	export commands_checked
+fi
+
+find_cmd "xar" "xar_bin/bin"
+find_cmd "dmg2img" "dmg2img_bin/usr/bin"
+
+c_d2iver=$(dmg2img 2>&1| grep v | sed -n 1p | awk '{print $2}' | sed 's/v//g')
+if [ ! "$d2iver" == "$dmgimgversion" ] && [ "$dmg2img" == "dmg2img" ]; then
+	echo "WARNING! dmg2img is not updated and may cause problems"
+	echo "Detected version: "$d2iver""
+	echo "Recommanded version: "$dmgimgversion""
+	read -p "Compile version "$dmgimgversion"? (y/n)" -n1 -r
+	echo
+	if [[ $REPLY =~ ^[Yy]$ ]];then
+		echo "Compiling dmg2img..."
+		compile_d2i
+	fi
 fi
 
 do_init_qemu
@@ -507,7 +523,7 @@ fi
 outfile=""$filepath/$filename".img"
 if [ ! -e "$outfile" ]; then
 	echo "Converting "$file" to img..."
-	dmg2img "$file" "$outfile"
+	$dmg2img "$file" "$outfile"
 #check_err=$(cat /tmp/dmg2img.log | grep -q "ERROR:"; echo $?)
 #if [ ! $? == 0 ] || [ ! -f "$outfile" ] || [ $check_err == 0 ]; then
 if [ ! $? == 0 ] || [ ! -f "$outfile" ]; then
@@ -544,7 +560,7 @@ if [ ! "$osver" == "10.6" ]; then
 	outfile=""$filepath"/BaseSystem.img"
 	if [ ! -e "$outfile" ]; then
 		echo "Converting BaseSystem.dmg..."
-		dmg2img "/mnt/osx/esd/BaseSystem.dmg" "$outfile"
+		$dmg2img "/mnt/osx/esd/BaseSystem.dmg" "$outfile"
 		if [ ! $? == 0 ] || [ ! -f "$outfile" ]; then
 			err_exit "Img conversion failed\n"
 		fi
@@ -593,12 +609,7 @@ sync
 	sync
 #fi
 
-if [ -f /mnt/osx/target/System/Library/Caches/kernelcache ]; then
-	echo "Deleting Kext Cache..."
-	rm /mnt/osx/target/System/Library/Caches/kernelcache
-fi
-
-
+do_remcache
 docheck_chameleon
 docheck_smbios
 
@@ -744,6 +755,13 @@ else
 fi
 }
 
+function do_remcache(){
+echo "Deleting Kext Cache..."
+if [ -f /mnt/osx/target/System/Library/Caches/kernelcache ]; then
+	rm /mnt/osx/target/System/Library/Caches/kernelcache
+fi
+}
+
 function do_mbr(){
 	echo "Patching Installer to support MBR"
 	cp -v "$scriptdir/osinstall_mbr/OSInstall.mpkg" "/mnt/osx/target/System/Installation/Packages/OSInstall.mpkg"
@@ -843,16 +861,12 @@ if [ ! "$osname" == "notsnow" ] && [ ! "$osname" == "none" ]; then
 		osbuild=$(cat "$verfile" | grep -A1 "<key>ProductBuildVersion</key>" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
 		osver=$(cat "$verfile" | grep -A1 "<key>ProductVersion</key>" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
 	
-	#if [ "$osver" == "10.6" ] && [ "$osbuild" == "10A432" ]; then
 	if [ "$osver" == "10.6" ]; then
 		osname="Snow Leopard"
-	#elif [ "$osver" == "10.7" ] && [ "$osbuild" == "" ]; then
 	elif [ "$osver" == "10.7" ]; then
 		osname="Lion"
-	#elif ["$osver " == "10.8" ] && [ "$osbuild" == "12A269" ]; then
 	elif [ "$osver" == "10.8" ]; then
 		osname="Mountain Lion"
-	#elif [ "$osver" == "10.9" ] && [ "$osbuild" == "" ]; then
 	elif [ "$osver" == "10.9" ]; then
 		osname="Mavericks"
 	elif [ ! "$osver" == "" ] && [ ! "$osbuild" == "" ]; then
@@ -902,6 +916,42 @@ function check_commands {
 		fi
 		$normal
 	done
+}
+
+function checkfile {
+	local file=$1
+	if [ ! -e "$1" ]; then
+		return 1
+	else
+		return 0
+	fi
+}
+
+function find_cmd {
+cmd=$1
+cmdir=$2
+if [ ! -z "$cmdir" ]; then
+	eval ${cmd}="$scriptdir/$cmdir/$cmd"
+else
+	eval ${cmd}="$scriptdir/$cmd"
+fi
+
+if ! checkfile "${!cmd}" == 0; then
+	eval ${cmd}="./$cmd"
+fi
+if ! checkfile "${!cmd}" == 0; then
+	which $cmd &>/dev/null
+	if [ ! $? == 0 ]; then #command not found
+		unset ${cmd} #unset cmd location var
+		unset cmd #unset cmd var
+	else #command located
+		eval ${cmd}=$cmd #cmd location is cmd
+	fi
+fi
+
+#echo "Arg   --> $cmd"
+#echo "Var   --> ${cmd}"
+#echo "Value --> ${!cmd}"
 }
 
 function check_command {
@@ -1037,7 +1087,7 @@ function payload_extractor(){
 }
 
 function extract_pkg(){
-	local cwd=$(pwd -P)
+	cd "$scriptdir"
 	pkgfile="$1"
 	dest="$2"
 	if [ ! -d "$dest" ] && [ ! -e "$dest" ]; then
@@ -1046,45 +1096,36 @@ function extract_pkg(){
 	#	usage
 	#	err_exit "Invalid Destination\n"
 	fi
-	cd "$scriptdir"
-	echo "Looking for xar in system..."
-	if ! check_command xar == 0; then
-	echo "Looking for our xar..."
-		echo "Changing PATH"
-		export PATH=$PATH:"$scriptdir/xar_bin/bin"
-		if ! check_command xar == 0; then
-			cd "$scriptdir"
-			echo "Compiling xar..."
+	if [ -z "$xar" ]; then
+		echo "Compiling xar..."
+		compile_xar
+		cd "$scriptdir"
+		cd "$dest"
+		echo "Looking for compiled xar..."
+		find_cmd "xar" "xar_bin/bin"
+		if [ -z "$xar" ]; then
+			err_exit "Something wrong, xar command missing\n"
+		fi
+	else
+		local chkxar=$(xar --version 2>&1 | grep -q "libxar.so.1"; echo $?)
+		if [ $chkxar == 0 ]; then
+			echo "xar is not working. recompiling..."
+			rm -r xar_bin/*
+			echo "Recompiling xar..."
 			compile_xar
+			cd "$scriptdir"
 			cd "$dest"
-			echo "Looking for compiled xar..."
-			if ! check_command xar == 0; then
-				err_exit "Something wrong, xar command missing\n"
-			fi
-		else
-			local chkxar=$(xar --version 2>&1 | grep -q "libxar.so.1"; echo $?)
+			local chkxar=$(xar -v 2>&1 | grep -q "libxar.so.1"; echo $?)
 			if [ $chkxar == 0 ]; then
-				echo "xar is not working. recompiling..."
-				cd "$scriptdir"
-				rm -r xar_bin/*
-				echo "Recompiling xar..."
-				compile_xar
-				cd "$dest"
-				local chkxar=$(xar -v 2>&1 | grep -q "libxar.so.1"; echo $?)
-				if [ $chkxar == 0 ]; then
-					err_exit "xar broken, cannot continue\n"
-				fi
+				err_exit "xar broken, cannot continue\n"
 			fi
 		fi
 	fi
+	cd "$scriptdir"
 	local fullpath=$(cd $(dirname "$pkgfile"); pwd -P)/$(basename "$pkgfile")
 	cd "$dest"
-	xar -xf  "$fullpath"
-	#xar -xf "$(dirname $pkgfile)$(basename $pkgfile)"
-	#if [ -d "$dest/Payloads" ]; then rm -r "$dest/Payloads"; fi
-	#mkdir "$dest/Payloads"
-	#cd "$dest/Payloads"
-	#if [ "$extension" == ".pkg" ] || [ "$pkgfile" == ".pkg" ]; then
+	if [ ! -f "$dmg2img" ]; then echo asda; fi
+	$xar -xf  "$fullpath"
 	local pkgext=".${pkgfile##*.}"
 	if [ "$pkgext" == ".pkg" ]; then
 		echo "Extracting Payloads..."
@@ -1120,7 +1161,7 @@ function compile_xar(){
 			err_exit "Download failed\n"
 		fi
 	fi
-	if [ ! -d "xar-"$xarver"" ]; then rm -r "xar-"$xarver""; fi
+	if [ -d "xar-"$xarver"" ]; then rm -r "xar-"$xarver""; fi
 		tar xvf "xar-"$xarver".tar.gz"
 		cd "xar-"$xarver""
 		./configure --prefix="$scriptdir/xar_bin"
@@ -1129,10 +1170,34 @@ function compile_xar(){
 			err_exit "Xar Build Failed\n"
 		fi
 		make install
-	if  [ ! -z $username ] || [ ! "$username" == "" ] || [ ! "$username" == " " ]; then
+	if  [ ! -z $username ] && [ ! "$username" == "" ] && [ ! "$username" == " " ]; then
 		chown -R "$user" "xar-"$xarver""
 		chmod -R 666 "xar-"$xarver""
 	fi
+}
+
+function compile_d2i(){
+	if [ ! -f "dmg2img-"$dmgimgversion".tar.gz" ]; then
+		wget "http://vu1tur.eu.org/tools/dmg2img-"$dmgimgversion".tar.gz"
+		if [ ! -f "dmg2img-"$dmgimgversion".tar.gz" ]; then
+			err_exit "Download failed\n"
+		fi
+	fi
+	if [ ! -d "dmg2img-"$dmgimgversion"" ]; then rm -r "dmg2img-"$dmgimgversion""; fi
+		tar xvf "dmg2img-"$dmgimgversion".tar.gz"
+		cd "dmg2img-"$dmgimgversion""
+		make
+		if [ ! $? == 0 ]; then
+			err_exit "dmg2img Build Failed\n"
+		else
+			$lgreen; echo "Build completed!"; $normal
+		fi
+		DESTDIR="$scriptdir/dmg2img_bin" make install
+	if  [ ! -z $username ] && [ ! "$username" == "" ] && [ ! "$username" == " " ]; then
+		chown -R "$user" "dmg2img-"$dmgimgversion""
+		chmod -R 666 "dmg2img-"$dmgimgversion""
+	fi
+	dmg2img="$scriptdir/dmg2img_bin/usr/bin/dmg2img"
 }
 
 function usage(){
