@@ -1124,7 +1124,6 @@ function extract_pkg(){
 	cd "$scriptdir"
 	local fullpath=$(cd $(dirname "$pkgfile"); pwd -P)/$(basename "$pkgfile")
 	cd "$dest"
-	if [ ! -f "$dmg2img" ]; then echo asda; fi
 	$xar -xf  "$fullpath"
 	local pkgext=".${pkgfile##*.}"
 	if [ "$pkgext" == ".pkg" ]; then
