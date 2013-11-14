@@ -14,18 +14,18 @@ Should work with:
  OSX 10.6, 10.7, 10.8, 10.9
 
 Required files:
-chameleon:
- boot
- boot0
- boot1h
+"chameleon" directory
+-boot
+-boot0
+-boot1h
 
-extra_kexts:
- FakeSMC.kext
- <any other kext> (NullCPUPowerManagement, ps2 controller, ...)
+"extra_kexts" directory
+-FakeSMC.kext
+-<any other kext> (NullCPUPowerManagement, ps2 controller, ...)
 
-osinstall_mbr:
- OSInstall
- OSInstall.mpkg
+"osinstall_mbr" directory (optional fpr MBR patch)"
+-OSInstall
+-OSInstall.mpkg
 
 see ./install_osx.sh -h for usage
 
@@ -33,3 +33,5 @@ This script uses:
  dmg2img (version 1.6.5 strongly recommended)
  qemu-nbd
  mkfs.hfsplus
+
+I AM NOT RESPONSIBLE FOR ANY DAMAGE THE USE OF THIS SCRIPT MAY CAUSE.

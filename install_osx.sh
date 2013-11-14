@@ -72,9 +72,9 @@ echo "Choose an operation..."
 echo "1 - Manage kexts"
 echo "2 - Reinstall / Update chameleon"
 echo "3 - Install / Reinstall MBR Patch"
-#echo "4 - Reinstall System"
-echo "4 - Delete image"
-echo "5 - Delete Kext Cache"
+echo "4 - Install / Reinstall SMBios"
+echo "5 - Delete image"
+echo "6 - Delete Kext Cache"
 echo "0 - Exit"
 printf "Choose an option: "; read choice
 case "$choice" in
@@ -87,18 +87,18 @@ case "$choice" in
 		err_exit ""
 		;;
 	2)
-		do_chameleon
+		docheck_chameleon
 		err_exit ""
 		;;
 	3)
 		docheck_mbr
 		err_exit ""
 		;;
-	#4)
-		#do_system
-	#	err_exit ""
-	#	;;
 	4)
+		docheck_smbios
+		err_exit ""
+	;;
+	5)
 		cleanup "ret"
 		if [ $virtualdev == 1 ]; then
 			echo "You are about to delete "$dev"?"
@@ -123,7 +123,7 @@ case "$choice" in
 		fi
 		err_exit ""
 		;;
-	5)
+	6)
 		echo "Deleting Kext Cache..."
 		if [ -f /mnt/osx/target/System/Library/Caches/kernelcache ]; then
 			rm /mnt/osx/target/System/Library/Caches/kernelcache
@@ -293,7 +293,7 @@ virtualdev=0
 vbhdd=0
 
 if [[ ! "$OSTYPE" == linux* ]]; then
-	err_exit "This script can only be run under Linux"
+	err_exit "This script can only be run under Linux\n"
 fi
 
 if [ "$(id -u)" != "0" ]; then
@@ -599,11 +599,8 @@ if [ -f /mnt/osx/target/System/Library/Caches/kernelcache ]; then
 fi
 
 
-if [ -f  "$scriptdir/chameleon/boot0" ] && [ -f  "$scriptdir/chameleon/boot1h" ] && [ -f  "$scriptdir/chameleon/boot" ]; then
-	do_chameleon	
-else
-	err_exit "Chameleon files missing, cannot continue\n"
-fi
+docheck_chameleon
+docheck_smbios
 
 if [ $virtualdev == 1 ]; then
 	if  [ ! -z $username ] || [ ! "$username" == "" ] || [ ! "$username" == " " ]; then
@@ -688,6 +685,26 @@ function qemu_map(){
 	fi
 }
 
+function docheck_smbios(){
+if [ -f "$/scriptdir/smbios.plist" ]; then
+	cp "$/scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
+else
+	echo "Skipping smbios.plist, file not found"
+	if [ ! "$osver" == "10.6" ]; then
+		echo "Warning: proper smbios.plist may be needed"
+	fi
+fi
+}
+
+function docheck_chameleon(){
+if [ -f  "$scriptdir/chameleon/boot0" ] && [ -f  "$scriptdir/chameleon/boot1h" ] && [ -f  "$scriptdir/chameleon/boot" ]; then
+	do_chameleon
+else
+	echo "WARNING: Cannot install Chameleon, critical files missing"
+	echo "Your installation won't be bootable"
+fi
+}
+
 function docheck_mbr(){
 if [ -d "$scriptdir/osinstall_mbr" ] && [ -f "$scriptdir/osinstall_mbr/OSInstall.mpkg" ] && [ -f "$scriptdir/osinstall_mbr/OSInstall" ]; then
 	check_mbrver
@@ -699,10 +716,13 @@ fi
 
 function check_mbrver(){
 if [ -d "$scriptdir/osinstall_mbr/tmp" ]; then rm -r "$scriptdir/osinstall_mbr/tmp"; fi
+echo "Checking patch version..."
 extract_pkg "$scriptdir/osinstall_mbr/OSInstall.mpkg" "$scriptdir/osinstall_mbr/tmp/p"
 if [ -f "/mnt/osx/target/Packages/OSInstall.mpkg" ]; then # esd
+	echo "Checking original version..."
 	extract_pkg "/mnt/osx/target/Packages/OSInstall.mpkg" "$scriptdir/osinstall_mbr/tmp/o"
 else #target
+	echo "Checking original version..."
 	extract_pkg "/mnt/osx/target/System/Installation/Packages/OSInstall.mpkg" "$scriptdir/osinstall_mbr/tmp/o"
 fi
 local origver=$(cat "$scriptdir/osinstall_mbr/tmp/o/Distribution" | grep system.version | grep -o 10.* | awk '{print $1}' | sed "s|['\)]||g")
@@ -1030,6 +1050,7 @@ function extract_pkg(){
 	echo "Looking for xar in system..."
 	if ! check_command xar == 0; then
 	echo "Looking for our xar..."
+		echo "Changing PATH"
 		export PATH=$PATH:"$scriptdir/xar_bin/bin"
 		if ! check_command xar == 0; then
 			cd "$scriptdir"
