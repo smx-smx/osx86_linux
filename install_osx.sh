@@ -697,8 +697,8 @@ function qemu_map(){
 }
 
 function docheck_smbios(){
-if [ -f "$/scriptdir/smbios.plist" ]; then
-	cp "$/scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
+if [ -f "$scriptdir/smbios.plist" ]; then
+	cp "$scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
 else
 	echo "Skipping smbios.plist, file not found"
 	if [ ! "$osver" == "10.6" ]; then
