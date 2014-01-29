@@ -20,6 +20,9 @@ white='printf \033[01;37m'
 debug=1
 trap err_exit SIGINT
 
+scriptdir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P)"
+cd $scriptdir
+
 dmgimgversion="1.6.5"
 xarver="1.5.2"
 
@@ -73,11 +76,13 @@ detect_osx_version
 echo "Working on "$dev""
 echo "Choose an operation..."
 echo "1 - Manage kexts"
-echo "2 - Reinstall / Update chameleon"
-echo "3 - Install / Reinstall MBR Patch"
-echo "4 - Install / Reinstall SMBios"
-echo "5 - Delete image"
-echo "6 - Delete Kext Cache"
+echo "2 - Manage kernels"
+echo "3 - Reinstall / Update chameleon"
+echo "4 - Install / Reinstall MBR Patch"
+echo "5 - Install / Reinstall SMBios"
+echo "6 - Delete image"
+echo "7 - Delete Kext Cache"
+echo "m - Mount Menu (Work in Progress)"
 echo "0 - Exit"
 printf "Choose an option: "; read choice
 case "$choice" in
@@ -90,18 +95,23 @@ case "$choice" in
 		err_exit ""
 		;;
 	2)
-		docheck_chameleon
+		clear
+		kernelmenu
 		err_exit ""
 		;;
 	3)
-		docheck_mbr
+		docheck_chameleon
 		err_exit ""
 		;;
 	4)
+		docheck_mbr
+		err_exit ""
+		;;
+	5)
 		docheck_smbios
 		err_exit ""
 	;;
-	5)
+	6)
 		cleanup "ret"
 		if [ $virtualdev == 1 ]; then
 			echo "You are about to delete "$dev"?"
@@ -126,14 +136,39 @@ case "$choice" in
 		fi
 		err_exit ""
 		;;
-	6)
+	7)
 		do_remcache
+		err_exit ""
+		;;
+	m)
+		mountmenu
 		err_exit ""
 		;;
 	*)
 		pause "Invalid option, press [enter] to try again"
 		clear
 		mediamenu
+esac
+}
+
+function mountmenu(){
+if [ "$osver" == "10.6" ]; then
+	echo "i - Mount Install Image"
+else
+	echo "b - Mount BaseSystem"
+	echo "e - Mount ESD"
+fi
+echo "t - Mount Target"
+echo "0 - Return to Main Menu"
+printf "Choose an option: "; read choice
+case "$choice" in
+0)
+	mediamenu
+	;;
+*)
+	pause "Invalid option, press [enter] to try again"
+	clear
+	mountmenu
 esac
 }
 
@@ -182,13 +217,73 @@ printf "Choose a kext to Install / Reinstall: "
 			echo "Installing ${!name}..."
 			#cp -R "$scriptdir/extra_kexts/${!name}" /mnt/osx/target/System/Library/Extensions/
 			#chmod -R 755 "/mnt/osx/target/System/Library/Extensions/${!name}"
-			cp -R "$scriptdir/extra_kexts/${!name}" /mnt/osx/target/Extra/Extensions/
+			cp -R "$kextdir/${!name}" /mnt/osx/target/Extra/Extensions/
 			chmod -R 755 "/mnt/osx/target/Extra/Extensions/${!name}"
 		fi
 	fi
 	echo "Done!"
 	kextmenu
 }
+
+function kernelmenu(){
+kernels=$(find "$kerndir" -maxdepth 1 -type f | wc -l)
+if [ $kernels == 0 ]; then
+	echo "No kernel to install"
+	pause "Press [enter] to return to menu"
+	mediamenu
+fi
+printf "Choose a kernel to Install / Reinstall: "
+	local k
+	local eskdir=$(echo "$kerndir" | sed 's/\ /\\\//g;s/\//\\\//g')
+	echo "0 - Return to main menu"
+	for k in `seq $kernels`; do
+		local option=$(find "$kerndir" -maxdepth 1 -type f | sed "s/$eskdir\///g" | sed -n "$k"p)
+			eval kern$k=$option
+			#if [ -d "/mnt/osx/target/System/Library/Extensions/"$option"" ]; then
+			if [ -f "/mnt/osx/target/"$option"" ]; then
+				printf "[*]\t$k - $option\n"
+			else
+				printf "[ ]\t$k - $option\n"
+			fi
+	done
+	echo "Choose a kernel to install/uninstall"
+	read choice
+	local name="kern$choice"
+	#echo "${!name}"
+	#eval echo \$kext$choice
+	if [ "$choice" == "0" ]; then
+		clear
+		mediamenu
+	fi
+	if [ -z "${!name}" ]; then
+		pause "Invalid option, press [enter] to try again"
+		clear
+		kernelmenu
+	else
+	clear
+		if [ -f "/mnt/osx/target/${!name}" ]; then
+			if [ "${!name}" == "mach_kernel" ]; then
+				read -p "Warning, you are about to overwrite the default Kernel. Do you want to back it up to \"apple_kernel\"? (yes/no/abort)" -n1 -r
+				echo
+				if [[ $REPLY =~ ^[Aa]$ ]];then
+					kernelmenu
+				elif [[ $REPLY =~ ^[Yy]$ ]];then
+					echo "Backing up mach_kernel..."
+					cp /mnt/osx/target/mach_kernel /mnt/osx/target/apple_kernel
+				fi
+			fi
+			echo "Removing ${!name}..."
+			rm "/mnt/osx/target/${!name}"
+		else
+			echo "Installing ${!name}..."
+			cp "$kerndir/${!name}" /mnt/osx/target/
+			chmod 755 "/mnt/osx/target/${!name}"
+		fi
+	fi
+	echo "Done!"
+	kernelmenu
+}
+
 
 function vdev_check(){
 echo "Virtual Device"
@@ -267,11 +362,10 @@ $lblue; printf "M"
 $lpurple; printf "X\n"
 $normal
 
-scriptdir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P)"
 kextdir="$scriptdir/extra_kexts"
+kerndir="$scriptdir/kernels"
 filepath="$( cd "$( dirname "$1" )" && pwd -P)"
 devpath="$( cd "$( dirname "$2" )" && pwd -P)"
-cd $scriptdir
 script=$scriptdir
 script+=/$(basename $0)
 
@@ -642,6 +736,18 @@ exit 0
 
 }
 
+function qemu_umount_all(){
+nbdmnt=($(mount | grep "/dev/nbd" | awk '{print $1}'))
+local anbd=$(ls -1 /dev/nbd*p* | sed '$s/..$//')
+for mount in $nbdmnt; do
+	echo "Unmounting "$mount"..."
+	local ures=$(umount $mount; echo $?)
+	if [ ! $ures == 0 ]; then
+		err_exit "Can't unmount "$mount"\n"
+	fi
+done
+}
+
 function do_init_qemu(){
 	echo "Setting qemu-nbd dev..."
 	remove_nbd=0
@@ -658,15 +764,7 @@ function do_init_qemu(){
 		echo "Checking for mounts..."
 		local nbdmnt=$(mount | grep -q "/dev/nbd"; echo $?)
 		if [ $nbdmnt == 0 ]; then
-			nbdmnt=($(mount | grep "/dev/nbd" | awk '{print $1}'))
-			local anbd=$(ls -1 /dev/nbd*p* | sed '$s/..$//')
-			for mount in $nbdmnt; do
-				echo "Unmounting "$mount"..."
-				local ures=$(umount $mount; echo $?)
-				if [ ! $ures == 0 ]; then
-					err_exit "Can't unmount "$mount"\n"
-				fi
-			done
+			qemu_umount_all
 		fi
 		for ndev in $anbd; do
 			qemu-nbd -d $ndev &>/dev/null
@@ -850,7 +948,7 @@ function detect_osx_version(){
 		elif [ "$mediamenu" == "1" ]; then
 			osname="none"
 			osver=""
-			echo "Warning: Can't detect OSX Build"
+			$lyellow; echo "Warning: Can't detect OSX Build"; $normal
 		else
 			err_exit "Can't detect OSX Build\n"
 		fi
@@ -1010,7 +1108,7 @@ sync; sync
 local esd_umount=0
 local base_umount=0
 local target_umount=0
-	if [ -d "$scriptdir/tmp" ]; then rm -r "$scriptdir/tmp"; fi
+	if [ ! "$scriptdir/tmp" == "/tmp" ] && [ -d "$scriptdir/tmp" ]; then rm -r "$scriptdir/tmp"; fi
 	if [ $(mount | grep -q "/mnt/osx/esd"; echo $?) == 0 ]; then umount `mount | grep "/mnt/osx/esd" | awk '{print $3}'`; fi
 	if [ $(mount | grep -q "/mnt/osx/base"; echo $?) == 0 ]; then umount `mount | grep "/mnt/osx/base" | awk '{print $3}'`; fi
 	if [ $(mount | grep -q "/mnt/osx/target"; echo $?) == 0 ]; then umount `mount | grep "/mnt/osx/target" | awk '{print $3}'`; fi
@@ -1021,7 +1119,7 @@ local target_umount=0
 		fi
 		esd_umount=1
 	else
-		echo "ERROR: Can't unmount esd!"
+		$lred; echo "ERROR: Can't unmount esd!"; $normal
 	fi
 	if [ ! $(mount | grep -q "/mnt/osx/base"; echo $?) == 0 ]; then
 		if [ -d "/mnt/osx/base" ] && [ $(ls -1 "/mnt/osx/base" | wc -l ) == 0 ]; then
@@ -1029,7 +1127,7 @@ local target_umount=0
 		fi
 		base_umount=1
 		else
-		echo "ERROR: Can't unmount basesystem!"
+		$lred; echo "ERROR: Can't unmount basesystem!"; $normal
 		local base_umount=1
 	fi
 	
@@ -1039,7 +1137,7 @@ local target_umount=0
 		fi
 		target_umount=1
 		else
-		echo "ERROR: Can't unmount target!"
+		$lred; echo "ERROR: Can't unmount target!"; $normal
 		local target_umount=1
 	fi
 	if [ -d "/mnt/osx" ] && [ $(ls -1 "/mnt/osx" | wc -l) == 0 ]; then
@@ -1063,7 +1161,7 @@ local target_umount=0
 		fi
 		if [ ! -z $touchedfile ] && [ ! -z $deletedfile ] &&  [ $touchedfile -eq 1 ] && [ $deletedfile -eq 0 ] && [ $virtualdev -eq 1 ] && [ -e "$dev" ] && [ ! -b "$dev" ]; then rm "$dev"; fi
 	else
-		echo "Some partitions couldn't be unmounted. Check what's accessing them and unmount them manually"
+		$lyellow; echo "Some partitions couldn't be unmounted. Check what's accessing them and unmount them manually"; $normal
 		if [ "$1" == "ret" ]; then err_exit ""; fi
 	fi
 #fi
@@ -1081,7 +1179,7 @@ function payload_extractor(){
 	fi
 	cat "$(basename "$1")" | $unarch -dc | cpio -i &>/dev/null
 	if [ ! $? == 0 ]; then
-		echo "WARNING: "$(dirname "$1")" Extraction failed"
+		$lyellow; echo "WARNING: "$(dirname "$1")" Extraction failed"; $normal
 	fi
 	cd "$dest"
 }
@@ -1097,11 +1195,11 @@ function extract_pkg(){
 	#	err_exit "Invalid Destination\n"
 	fi
 	if [ -z "$xar" ]; then
-		echo "Compiling xar..."
+		$lyellow; echo "Compiling xar..."; $normal
 		compile_xar
 		cd "$scriptdir"
 		cd "$dest"
-		echo "Looking for compiled xar..."
+		$white; echo "Looking for compiled xar..."; $normal
 		find_cmd "xar" "xar_bin/bin"
 		if [ -z "$xar" ]; then
 			err_exit "Something wrong, xar command missing\n"
@@ -1109,9 +1207,9 @@ function extract_pkg(){
 	else
 		local chkxar=$(xar --version 2>&1 | grep -q "libxar.so.1"; echo $?)
 		if [ $chkxar == 0 ]; then
-			echo "xar is not working. recompiling..."
+			$lyellow; echo "xar is not working. recompiling..."; $normal
 			rm -r xar_bin/*
-			echo "Recompiling xar..."
+			$lyellow; echo "Recompiling xar..."; $normal
 			compile_xar
 			cd "$scriptdir"
 			cd "$dest"
@@ -1208,7 +1306,8 @@ printf "$0 [img file/vdi/vmdk/vhd]\tOpen the setup management/tweak menu\n"
 printf "$0 [pkg/mpkg] [destdir]\t\tExtract a package to destdir\n"
 printf "Management menu:\n"
 printf "\t-Install/Remove extra kexts\n"
-printf "\t-Install/Reinstll chameleon\n"
+printf "\t-Install/Remove extra kernels\n"
+printf "\t-Install/Reinstall chameleon\n"
 printf "\t-Install/Reinstall mbr patch\n"
 #printf "\t-Apply tweaks/workarounds\n"
 printf "\t-Erase the whole setup partition\n"

@@ -34,6 +34,11 @@ smbios.plist in script directory (for Lion/Mountain Lion/Maverics)
 
 see ./install_osx.sh -h for usage
 
+This script requires:
+-cpio
+-udisks
+-nbd
+
 This script uses:
  dmg2img (version 1.6.5 strongly recommended)
  qemu-nbd
