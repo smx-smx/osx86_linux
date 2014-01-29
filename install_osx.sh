@@ -518,7 +518,12 @@ elif [ ! -f "$file" ] || [ ! "$extension" == ".dmg" ]; then
 		vdev_check "$file"
 	else
 		usage
-		err_exit "Invalid file specified\n"
+		isdev=$(echo "$file" | grep -q '/dev/'; echo $?)
+		if [ "$isdev" == "0" ]; then
+			err_exit "No such device\n"
+		else
+			err_exit "Invalid file specified\n"
+		fi
 	fi
 fi
 if [ -z "$dev" ] || [ "$dev" == "" ] || [ "$dev" == " " ]; then
@@ -891,7 +896,7 @@ local patchbuild=$(cat "$scriptdir/tmp/osinstall_mbr/p/Distribution" | grep pkg.
 if [ ! "$origver" == "$osver" ]; then
 	printf "Package:\t$origver\nOS:\t$osver\n"
 	$lred; echo "WARNING: NOT APPLYING MBR PATCH"
-	"MPKG DOESN'T MATCH OS VERSION!"
+	echo "MPKG DOESN'T MATCH OS VERSION!"
 	$normal
 	dombr=0
 elif [ ! "$patchver" == "$osver" ] || [ ! "$patchver" == "$origver" ] || [ ! "$patchbuild" == "$origbuild" ]; then
