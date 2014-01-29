@@ -755,6 +755,7 @@ sync
 do_remcache
 docheck_chameleon
 docheck_smbios
+docheck_dsdt
 
 if [ $virtualdev == 1 ]; then
 	chmod 666 "$dev"
