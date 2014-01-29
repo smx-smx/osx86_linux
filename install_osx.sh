@@ -76,7 +76,11 @@ if [ ! $(mount | grep -q "/mnt/osx/target"; echo $?) == 0 ]; then
 	if [ $virtualdev == 1 ]; then
 		mount -t hfsplus /dev/nbd0p1 /mnt/osx/target
 	else
-		mount -t hfsplus ""$dev"1" /mnt/osx/target
+		if [ $(mount | grep -q "$dev"; echo $?) == 0 ]; then
+			echo "remounting..."
+			umount ""$dev"1"
+		fi
+			mount -t hfsplus ""$dev"1" /mnt/osx/target
 	fi
 	if [ ! $? == 0 ]; then
 		err_exit "Cannot mount target\n"
@@ -97,7 +101,6 @@ echo "5 - Install / Reinstall Custom DSDT"
 echo "6 - Install / Reinstall SMBios"
 echo "7 - Erase Setup"
 echo "8 - Delete Kext Cache"
-echo "m - Mount Menu (Work in Progress)"
 echo "0 - Exit"
 printf "Choose an option: "; read choice
 case "$choice" in
@@ -162,35 +165,10 @@ case "$choice" in
 		do_remcache
 		mediamenu
 		;;
-	m)
-		mountmenu
-		mediamenu
-		;;
 	*)
 		pause "Invalid option, press [enter] to try again"
 		clear
 		mediamenu
-esac
-}
-
-function mountmenu(){
-if [ "$osver" == "10.6" ]; then
-	echo "i - Mount Install Image"
-else
-	echo "b - Mount BaseSystem"
-	echo "e - Mount ESD"
-fi
-echo "t - Mount Target"
-echo "0 - Return to Main Menu"
-printf "Choose an option: "; read choice
-case "$choice" in
-0)
-	mediamenu
-	;;
-*)
-	pause "Invalid option, press [enter] to try again"
-	clear
-	mountmenu
 esac
 }
 
@@ -295,18 +273,22 @@ printf "Choose a kernel to Install / Reinstall: "
 	else
 	clear
 		if [ -f "/mnt/osx/target/${!name}" ]; then
-			if [ "${!name}" == "mach_kernel" ]; then
+			if [ "${!name}" == "mach_kernel" ]; then #stock kernel
 				read -p "Warning, you are about to overwrite the default Kernel. Do you want to back it up to \"apple_kernel\"? (yes/no/abort)" -n1 -r
 				echo
 				if [[ $REPLY =~ ^[Aa]$ ]];then
 					kernelmenu
 				elif [[ $REPLY =~ ^[Yy]$ ]];then
 					echo "Backing up mach_kernel..."
-					cp /mnt/osx/target/mach_kernel /mnt/osx/target/apple_kernel
+					mv /mnt/osx/target/mach_kernel /mnt/osx/target/apple_kernel
+					echo "Copying new mach_kernel..."
+					cp "$kerndir/${!name}" /mnt/osx/target/
+					chmod 755 "/mnt/osx/target/${!name}"
 				fi
+			else #alternative kernel name, we can delete
+				echo "Removing ${!name}..."
+				rm "/mnt/osx/target/${!name}"
 			fi
-			echo "Removing ${!name}..."
-			rm "/mnt/osx/target/${!name}"
 		else
 			echo "Installing ${!name}..."
 			cp "$kerndir/${!name}" /mnt/osx/target/
@@ -846,7 +828,7 @@ function docheck_smbios(){
 if [ -f "$scriptdir/smbios.plist" ]; then
 	cp "$scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
 else
-	echo "Skipping smbios.plist, file not found"
+	$lyellow; echo "Skipping smbios.plist, file not found"; $normal
 	if [ ! "$osver" == "10.6" ]; then
 		echo "Warning: proper smbios.plist may be needed"
 	fi
