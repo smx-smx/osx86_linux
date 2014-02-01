@@ -22,4 +22,4 @@ cat "$logfile" | ./ansi2html.sh --bg=dark > "$htmlfile"
 rm "$logfile"
 chown "$SUDO_USER" "$htmlfile"
 chmod 666 "$htmlfile"
-exit $?
+exit 0

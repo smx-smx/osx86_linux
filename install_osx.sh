@@ -960,14 +960,13 @@ function detect_osx_version(){
 if [ ! "$osname" == "notsnow" ] && [ ! "$osname" == "none" ]; then
 		osbuild=$(cat "$verfile" | grep -A1 "<key>ProductBuildVersion</key>" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
 		osver=$(cat "$verfile" | grep -A1 "<key>ProductVersion</key>" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
-	
-	if [ "$osver" == "10.6" ]; then
+	if [[ "$osver" =~ "10.6" ]]; then
 		osname="Snow Leopard"
-	elif [ "$osver" == "10.7" ]; then
+	elif [[ "$osver" =~ "10.7" ]]; then
 		osname="Lion"
-	elif [ "$osver" == "10.8" ]; then
+	elif [[ "$osver" =~ "*10.8" ]]; then
 		osname="Mountain Lion"
-	elif [ "$osver" == "10.9" ]; then
+	elif [[ "$osver" =~ "10.9" ]]; then
 		osname="Mavericks"
 	elif [ ! "$osver" == "" ] && [ ! "$osbuild" == "" ]; then
 		osname="Not supported"
@@ -981,9 +980,9 @@ if [ ! "$osname" == "notsnow" ] && [ ! "$osname" == "none" ]; then
 fi
 
 	if [ $tq == 1 ]; then
-		err_exit ""$osname" "$osver" detected\n"
+		err_exit "$osname $osver detected\n"
 	else
-		$lgreen; echo ""$osname" "$osver" detected"; $normal
+		$lgreen; echo "$osname $osver detected"; $normal
 	fi
 }
 	
