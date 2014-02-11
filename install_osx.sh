@@ -19,7 +19,13 @@ white='printf \033[01;37m'
 
 if [ -z $really_verbose ]; then really_verbose=1; fi
 
-if [ $really_verbose == 1 ]; then verbose="v"; else verbose=""; fi
+if [ $really_verbose == 1 ]; then
+	verbose="v"
+	verbose2="-v"
+else
+	verbose=""
+	verbose2=""
+fi
 trap err_exit SIGINT
 
 scriptdir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P)"
@@ -241,7 +247,7 @@ printf "Choose a kernel to Install / Reinstall: "
 					$yellow; echo "Backing up mach_kernel..."; $normal
 					mv /mnt/osx/target/mach_kernel /mnt/osx/target/apple_kernel
 					$yellow; echo "Copying new mach_kernel..."; $normal
-					cp -"$verbose" "$kerndir/${!name}" /mnt/osx/target/
+					cp "$verbose2" "$kerndir/${!name}" /mnt/osx/target/
 					chmod 755 "/mnt/osx/target/${!name}"
 				fi
 			else #alternative kernel name, we can delete
@@ -250,7 +256,7 @@ printf "Choose a kernel to Install / Reinstall: "
 			fi
 		else
 			$yellow; echo "Installing ${!name}..."; $normal
-			cp "-$verbose" "$kerndir/${!name}" /mnt/osx/target/
+			cp "$verbose2" "$kerndir/${!name}" /mnt/osx/target/
 			chmod 755 "/mnt/osx/target/${!name}"
 		fi
 	fi
@@ -677,15 +683,19 @@ docheck_mbr
 sync
 
 #if [ ! $(ls -1 "$kextdir/*.kext" | wc -l) == 0 ]; then
-	echo "Installing kexts in \"extra_kexts\" directory"
+	$ylellow; echo "Installing kexts in \"extra_kexts\" directory"; $normal
 	kextdir="$scriptdir/extra_kexts"
-	for kext in $kextdir/*.kext; do
-		echo " Installing $(basename $kext)..."
-		#cp -Rv "$kext" /mnt/osx/target/System/Library/Extensions/
-		#chmod -R 755 "/mnt/osx/target/System/Library/Extensions/$(basename $kext)"
-		cp -R"$verbose" "$kext" /mnt/osx/target/Extra/Extensions/
-		chmod -R 755 "/mnt/osx/target/Extra/Extensions/$(basename $kext)"
-	done
+	if [ ! "$(ls -1 extra_kexts | wc -l)" == "0" ]; then
+		for kext in $kextdir/*.kext; do
+			echo " Installing $(basename $kext)..."
+			#cp -Rv "$kext" /mnt/osx/target/System/Library/Extensions/
+			#chmod -R 755 "/mnt/osx/target/System/Library/Extensions/$(basename $kext)"
+			cp -R"$verbose" "$kext" /mnt/osx/target/Extra/Extensions/
+			chmod -R 755 "/mnt/osx/target/Extra/Extensions/$(basename $kext)"
+		done
+	else
+		echo "No kext to install"
+	fi
 	sync
 #fi
 
@@ -781,7 +791,7 @@ function qemu_map(){
 
 function docheck_smbios(){
 if [ -f "$scriptdir/smbios.plist" ]; then
-	cp "-$verbose" "$scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
+	cp "$verbose2" "$scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
 else
 	$lyellow; echo "Skipping smbios.plist, file not found"; $normal
 	if [[ ! "$osver" =~ "10.6" ]]; then
@@ -792,7 +802,7 @@ fi
 
 function docheck_dsdt(){
 if [ -f "$scriptdir/DSDT.aml" ]; then
-	cp "-$verbose" "$scriptdir/DSDT.aml" /mnt/osx/target/Extra/DSDT.aml
+	cp "$verbose2" "$scriptdir/DSDT.aml" /mnt/osx/target/Extra/DSDT.aml
 else
 	$lred; echo "DSDT.aml not found!"; $normal
 	$lyellow; echo "Using system stock DSDT table"; $normal
@@ -861,13 +871,13 @@ fi
 
 function do_mbr(){
 	$lyellow; echo "Patching Installer to support MBR"; $normal
-	cp -"$verbose" "$scriptdir/osinstall_mbr/OSInstall.mpkg" "/mnt/osx/target/System/Installation/Packages/OSInstall.mpkg"
-	cp -"$verbose" "$scriptdir/osinstall_mbr/OSInstall" "/mnt/osx/target/System/Library/PrivateFrameworks/Install.framework/Frameworks/OSInstall.framework/Versions/A/OSInstall"
+	cp "$verbose2" "$scriptdir/osinstall_mbr/OSInstall.mpkg" "/mnt/osx/target/System/Installation/Packages/OSInstall.mpkg"
+	cp "$verbose2" "$scriptdir/osinstall_mbr/OSInstall" "/mnt/osx/target/System/Library/PrivateFrameworks/Install.framework/Frameworks/OSInstall.framework/Versions/A/OSInstall"
 }
 
 function do_chameleon(){
 	$lyellow; echo "Installing chameleon..."; $normal
-	cp -"$verbose" "$scriptdir/chameleon/boot" /mnt/osx/target/
+	cp "$verbose2" "$scriptdir/chameleon/boot" /mnt/osx/target/
 	sync
 	
 	if [ -d "$scriptdir/chameleon/Themes" ]; then
@@ -906,8 +916,8 @@ function do_system(){
 		cp -pdR"$verbose" /mnt/osx/base/* /mnt/osx/target/
 		
 		$lyellow; echo "Copying installation packages to "$dev"..." ; $normal
-		rm -"$verbose" /mnt/osx/target/System/Installation/Packages
-		mkdir -"$verbose" /mnt/osx/target/System/Installation/Packages
+		rm "$verbose2" /mnt/osx/target/System/Installation/Packages
+		mkdir "$verbose2" /mnt/osx/target/System/Installation/Packages
 		cp -pdR"$verbose" /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
 		sync
 		$yellow; echo "Copying kernel..."; $normal
