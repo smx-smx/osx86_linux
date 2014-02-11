@@ -17,10 +17,7 @@ lpurple='printf \033[01;35m'
 lcyan='printf \033[01;36m'
 white='printf \033[01;37m'
 
-############################################
-#use verbose flag on commands
-really_verbose=1
-############################################
+if [ -z $really_verbose ]; then really_verbose=1; fi
 
 if [ $really_verbose == 1 ]; then verbose="v"; else verbose=""; fi
 trap err_exit SIGINT
@@ -639,7 +636,7 @@ fi
 
 detect_osx_version
 
-if [ ! "$osver" == "10.6" ]; then
+if [[ ! "$osver" =~ "10.6" ]]; then
 	outfile=""$filepath"/BaseSystem.img"
 	if [ ! -e "$outfile" ]; then
 		echo "Converting BaseSystem.dmg..."
@@ -787,7 +784,7 @@ if [ -f "$scriptdir/smbios.plist" ]; then
 	cp "-$verbose" "$scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
 else
 	$lyellow; echo "Skipping smbios.plist, file not found"; $normal
-	if [ ! "$osver" == "10.6" ]; then
+	if [[ ! "$osver" =~ "10.6" ]]; then
 		$lred; echo "Warning: proper smbios.plist may be needed"; $normal
 	fi
 fi
@@ -903,7 +900,7 @@ function do_chameleon(){
 function do_system(){
 	$lyellow; echo "Copying Base System to "$dev"..."; $normal
 	#rsync -arpv --progress /mnt/osx/base/* /mnt/osx/target/
-	if [ "$osver" == "10.6" ]; then
+	if [[ "$osver" =~ "10.6" ]]; then
 		cp -pdR"$verbose" /mnt/osx/esd/* /mnt/osx/target/
 	else
 		cp -pdR"$verbose" /mnt/osx/base/* /mnt/osx/target/
@@ -914,7 +911,7 @@ function do_system(){
 		cp -pdR"$verbose" /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
 		sync
 		$yellow; echo "Copying kernel..."; $normal
-		if [ "$osver" == "10.9" ]; then
+		if [[ "$osver" =~ "10.9" ]]; then
 			$lyellow; echo "Kernel is in BaseSystemBinaries.pkg, extracting..."; $normal
 			extract_pkg "/mnt/osx/esd/Packages/BaseSystemBinaries.pkg" "$scriptdir/tmp/bsb" "skip"
 			cp -a"$verbose" "$scriptdir/tmp/bsb/mach_kernel" "/mnt/osx/target/"
@@ -964,13 +961,13 @@ if [ ! "$osname" == "notsnow" ] && [ ! "$osname" == "none" ]; then
 		osname="Snow Leopard"
 	elif [[ "$osver" =~ "10.7" ]]; then
 		osname="Lion"
-	elif [[ "$osver" =~ "*10.8" ]]; then
+	elif [[ "$osver" =~ "10.8" ]]; then
 		osname="Mountain Lion"
 	elif [[ "$osver" =~ "10.9" ]]; then
 		osname="Mavericks"
 	elif [ ! "$osver" == "" ] && [ ! "$osbuild" == "" ]; then
 		osname="Not supported"
-		osver="version"
+		osver="version ($osver)"
 		local tq=1
 	else
 		osname="Unknown"

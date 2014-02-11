@@ -1,5 +1,6 @@
 #!/bin/bash
 lred='printf \033[01;31m'
+export really_verbose=0
 function initlog(){
 	export logfile=`date +%d-%b-%y_%H%M%S`".log"
 	if [ -f "$scriptdir/$logfile" ]; then rm "$scriptdir/$logfile"; fi
