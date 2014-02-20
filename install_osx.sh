@@ -17,6 +17,8 @@ lpurple='printf \033[01;35m'
 lcyan='printf \033[01;36m'
 white='printf \033[01;37m'
 
+program_revision=16
+
 if [ -z $really_verbose ]; then really_verbose=1; fi
 
 if [ $really_verbose == 1 ]; then
@@ -64,9 +66,15 @@ if [ ! $(mount | grep -q "/mnt/osx/target"; echo $?) == 0 ]; then
 	else
 		if [ $(mount | grep -q "$dev"; echo $?) == 0 ]; then
 			$yellow; echo "Remounting..."; $normal
-			umount ""$dev"1"
+			umount "$dev" 2>/dev/null
+			if [ ! $? == 0 ]; then
+				umount ""$dev"1"
+			fi
 		fi
-			mount -t hfsplus ""$dev"1" /mnt/osx/target
+			mount -t hfsplus "$dev" /mnt/osx/target 2>/dev/null
+			if [ ! $? == 0 ]; then
+				mount -t hfsplus ""$dev"1" /mnt/osx/target
+			fi
 	fi
 	if [ ! $? == 0 ]; then
 		err_exit "Cannot mount target\n"
@@ -333,6 +341,8 @@ $lyellow; printf "S"
 $lblue; printf "M"
 $lpurple; printf "X\n"
 $normal
+
+echo "Version: r$program_revision"
 
 export -f payload_extractor
 mediamenu=0
@@ -719,6 +729,8 @@ if [ $virtualdev == 1 ] && [ "$dextension" == ".img" ]; then
 		if [ ! $? == 0 ] || [ ! -f ""$devpath/$dfilename".vdi" ]; then
 			err_exit "Conversion Failed\n"
 		else
+			chmod 666 "$devpath/$dfilename".vdi"
+			chown "$SUDO_USER" "$devpath/$dfilename".vdi"
 			read -p "Do you want to delete the img file? (y/n)" -n1 -r
 			echo
 			if [[ $REPLY =~ ^[Yy]$ ]];then
@@ -810,7 +822,7 @@ fi
 }
 
 function docheck_chameleon(){
-if [ -f  "$scriptdir/chameleon/boot0" ] && [ -f  "$scriptdir/chameleon/boot1h" ] && [ -f  "$scriptdir/chameleon/boot" ]; then
+if  [ -f  "$scriptdir/chameleon/boot1h" ] && [ -f  "$scriptdir/chameleon/boot" ]; then
 	do_chameleon
 else
 	$lred; echo "WARNING: Cannot install Chameleon, critical files missing"
@@ -891,17 +903,30 @@ function do_chameleon(){
 	sync
 	
 	$yellow; echo "Flashing boot record..."; $normal
+	if [ ! -f  "$scriptdir/chameleon/boot0" ]; then
+		$lred; echo "WARNING: MBR BootCode (boot0) Missing."
+		echo "Installing Chameleon on Partition Only"; $normal
+	else
+		local do_instMBR=0
+		read -p "Do you want to install Chameleon on MBR? (y/n)" -n1 -r
+		echo
+		if [[ $REPLY =~ ^[Yy]$ ]];then do_instMBR=1; fi
+	fi
 	if [ $virtualdev == 1 ]; then
-		dd bs=440 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="/dev/nbd0"
-		sleep 0.5
-		sync
+		if [ $do_instMBR == 1 ]; then
+			dd bs=440 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="/dev/nbd0"
+			sleep 0.5
+			sync
+		fi
 		sleep 0.5
 		dd if="$scriptdir/chameleon/boot1h" of="/dev/nbd0p1"
 		sleep 0.5
 		sync
 		sleep 0.5
 	else
-		dd bs=440 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="$dev"
+		if [ $do_instMBR == 1 ]; then
+			dd bs=440 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="$dev"
+		fi
 		dd if="$scriptdir/chameleon/boot1h" of=""$dev"1"
 	fi
 	sync
