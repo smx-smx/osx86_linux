@@ -1,6 +1,6 @@
 #!/bin/bash
 lred='printf \033[01;31m'
-export really_verbose=0
+export really_verbose=1
 
 function err_exit() {
 	$lred; printf "$1"; $normal

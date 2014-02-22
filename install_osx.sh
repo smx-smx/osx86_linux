@@ -17,9 +17,10 @@ lpurple='printf \033[01;35m'
 lcyan='printf \033[01;36m'
 white='printf \033[01;37m'
 
-program_revision=16
+program_revision=17
+configfile="config.cfg"
 
-if [ -z $really_verbose ]; then really_verbose=1; fi
+if [ -z $really_verbose ]; then really_verbose=0; fi
 
 if [ $really_verbose == 1 ]; then
 	verbose="v"
@@ -58,43 +59,39 @@ if [ $virtualdev == 1 ]; then
 		err_exit "Corrupted image\n"
 	fi
 fi
-if [ ! $(mount | grep -q "/mnt/osx/target"; echo $?) == 0 ]; then
-	$yellow; echo "Mounting..."; $normal
-	if [ ! -d /mnt/osx/target ]; then mkdir -p /mnt/osx/target; fi
-	if [ $virtualdev == 1 ]; then
-		mount -t hfsplus /dev/nbd0p1 /mnt/osx/target
-	else
-		if [ $(mount | grep -q "$dev"; echo $?) == 0 ]; then
-			$yellow; echo "Remounting..."; $normal
-			umount "$dev" 2>/dev/null
-			if [ ! $? == 0 ]; then
-				umount ""$dev"1"
-			fi
-		fi
-			mount -t hfsplus "$dev" /mnt/osx/target 2>/dev/null
-			if [ ! $? == 0 ]; then
-				mount -t hfsplus ""$dev"1" /mnt/osx/target
-			fi
-	fi
-	if [ ! $? == 0 ]; then
-		err_exit "Cannot mount target\n"
-	elif [ ! -d /mnt/osx/target/Extra ]; then
-		mkdir -p /mnt/osx/target/Extra/Extensions
-	fi
+
+$yellow; echo "Mounting..."; $normal
+if [ $virtualdev == 1 ]; then
+	mount_part "/dev/nbd0p1" "target"
 else
-	$yellow; echo "Skipping mount, already mounted"; $normal
+	$yellow; echo "Try $dev..."; $normal
+	mount_part "$dev" "target" "silent"
+	if [ ! "$mount_part_ret" == "err_success" ]; then
+		$yellow; echo "Try "$dev"1..."; $normal
+		mount_part ""$dev"1" "target"
+	fi
 fi
+if [ ! "$mount_part_ret" == "err_success" ]; then
+	err_exit "Cannot mount target\n"
+else
+	$lgreen; echo "Target Mounted"; $normal
+fi
+if [ ! -d /mnt/osx/target/Extra ]; then
+	mkdir -p /mnt/osx/target/Extra/Extensions
+fi
+
 detect_osx_version
 echo "Working on "$dev""
 echo "Choose an operation..."
 echo "1 - Manage kexts"
-echo "2 - Manage kernels"
-echo "3 - Reinstall / Update chameleon"
-echo "4 - Install / Reinstall MBR Patch"
-echo "5 - Install / Reinstall Custom DSDT"
-echo "6 - Install / Reinstall SMBios"
-echo "7 - Erase Setup"
-echo "8 - Delete Kext Cache"
+echo "2 - Manage chameleon Modules"
+echo "3 - Manage kernels"
+echo "4 - Reinstall / Update chameleon"
+echo "5 - Install / Reinstall MBR Patch"
+echo "6 - Install / Reinstall Custom DSDT"
+echo "7 - Install / Reinstall SMBios"
+echo "8 - Erase Setup"
+echo "9 - Delete Kext Cache"
 echo "0 - Exit"
 $white; printf "Choose an option: "; read choice; $normal
 case "$choice" in
@@ -108,29 +105,34 @@ case "$choice" in
 		;;
 	2)
 		clear
-		kernelmenu
+		chammodmenu
 		mediamenu
 		;;
 	3)
-		docheck_chameleon
+		clear
+		kernelmenu
 		mediamenu
 		;;
 	4)
+		docheck_chameleon
+		mediamenu
+		;;
+	5)
 		docheck_mbr
 		pause; clear
 		mediamenu
 		;;
-	5)
+	6)
 		docheck_dsdt
 		pause; clear
 		mediamenu
 		;;
-	6)
+	7)
 		docheck_smbios
 		pause; clear
 		mediamenu
 	;;
-	7)
+	8)
 		cleanup "ret"
 		if [ $virtualdev == 1 ]; then
 			$lred; echo "WARNING: You are about to delete "$dev" content!"
@@ -155,7 +157,7 @@ case "$choice" in
 		fi
 		err_exit ""
 		;;
-	8)
+	9)
 		do_remcache
 		mediamenu
 		;;
@@ -212,6 +214,52 @@ printf "Choose a kext to Install / Reinstall: "
 	kextmenu
 }
 
+function chammodmenu(){
+modules=$(find "$scriptdir/chameleon/Modules" -maxdepth 1 -type f -name "*.dylib" | wc -l)
+if [ $modules == 0 ]; then
+	$lred; echo "No module to install"; $normal
+	pause "Press [enter] to return to menu"
+	mediamenu
+fi
+printf "Choose a module to Install / Reinstall: "
+	local m
+	local esmdir=$(echo "$scriptdir/chameleon/Modules" | sed 's/\ /\\\//g;s/\//\\\//g')
+	$white; echo "0 - Return to main menu"; $normal
+	for m in `seq $modules`; do
+		local option=$(find "$scriptdir/chameleon/Modules" -maxdepth 1 -type f -not -name ".gitignore" -name "*.dylib" | sed "s/$esmdir\///g" | sed -n "$m"p)
+			eval module$m="$option"
+			if [ -f "/mnt/osx/target/Extra/Modules/"$option"" ]; then
+				printf "[*]\t$m - $option\n"
+			else
+				printf "[ ]\t$m - $option\n"
+			fi
+	done
+	$white; echo "Choose a module to install/uninstall"; $normal
+	read choice
+	local name="module$choice"
+	if [ "$choice" == "0" ]; then
+		clear
+		mediamenu
+	fi
+	if [ -z "${!name}" ]; then
+		pause "Invalid option, press [enter] to try again"
+		clear
+		chammodmenu
+	else
+	clear
+		if [ -f "/mnt/osx/target/Extra/Modules/${!name}" ]; then
+			$yellow; echo "Removing ${!name}..."; $normal
+			rm "/mnt/osx/target/Extra/Modules/${!name}"
+		else
+			$yellow; echo "Installing ${!name}..."; $normal
+			cp "$scriptdir/chameleon/Modules/${!name}" /mnt/osx/target/Extra/Modules/
+			chmod -R 755 "/mnt/osx/target/Extra/Modules/${!name}"
+		fi
+	fi
+	$lgreen; echo "Done!"; $normal
+	chammodmenu
+}
+
 function kernelmenu(){
 kernels=$(find "$kerndir" -maxdepth 1 -type f -not -name ".gitignore" | wc -l)
 if [ $kernels == 0 ]; then
@@ -255,7 +303,7 @@ printf "Choose a kernel to Install / Reinstall: "
 					$yellow; echo "Backing up mach_kernel..."; $normal
 					mv /mnt/osx/target/mach_kernel /mnt/osx/target/apple_kernel
 					$yellow; echo "Copying new mach_kernel..."; $normal
-					cp "$verbose2" "$kerndir/${!name}" /mnt/osx/target/
+					cp $verbose2 "$kerndir/${!name}" /mnt/osx/target/
 					chmod 755 "/mnt/osx/target/${!name}"
 				fi
 			else #alternative kernel name, we can delete
@@ -264,7 +312,7 @@ printf "Choose a kernel to Install / Reinstall: "
 			fi
 		else
 			$yellow; echo "Installing ${!name}..."; $normal
-			cp "$verbose2" "$kerndir/${!name}" /mnt/osx/target/
+			cp $verbose2 "$kerndir/${!name}" /mnt/osx/target/
 			chmod 755 "/mnt/osx/target/${!name}"
 		fi
 	fi
@@ -274,7 +322,7 @@ printf "Choose a kernel to Install / Reinstall: "
 
 
 function vdev_check(){
-echo "Virtual Device"
+echo "Virtual HDD Image Mode"
 	virtualdev=1
 	touchedfile=0
 	deletedfile=0
@@ -363,6 +411,17 @@ devpath="$( cd "$( dirname "$2" )" && pwd -P)"
 script=$scriptdir
 script+=/$(basename $0)
 
+if [ "$(mount | grep -q "/mnt"; echo $?)" == "0" ]; then
+	umount /mnt
+	if [ "$(mount | grep -q "/mnt"; echo $?)" == "0" ]; then
+		err_exit "/mnt busy, cannot continue\n"
+	fi
+fi
+if [ ! -d /mnt/osx ]; then mkdir -p /mnt/osx; fi
+if [ ! -d /mnt/osx/esd ]; then mkdir /mnt/osx/esd; fi
+if [ ! -d /mnt/osx/base ]; then mkdir /mnt/osx/base; fi
+if [ ! -d /mnt/osx/target ]; then mkdir /mnt/osx/target; fi
+
 for ((c=0;c<3;c++)); do
 	local vartmp="nbd"$c"_mapped"
 	eval ${vartmp}=0
@@ -387,6 +446,59 @@ if [ "$(id -u)" != "0" ]; then
    err_exit "This script must be run as root\n"
 fi
 
+name=$(basename "$1") #input
+extension=".${name##*.}"
+filename="${name%.*}"
+
+dname=$(basename "$2") #output
+dextension=".${dname##*.}"
+dfilename="${dname%.*}"
+
+if [ -b "$1" ] && [ ! -f "$1" ] && [ ! -d "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then #./install_osx.sh [dev]
+	dev="$1"
+	mediamenu
+elif [ -f "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then #./install_osx.sh [file]
+	if [ "$extension" == ".dmg" ]; then #./install_osx.sh [file.dmg]
+		usage
+		err_exit "You must specify a valid target drive or image\n"
+	elif [ "$extension" == ".img" ] || [ "$extension" == ".vhd" ] || [ "$extension" == ".vdi" ] || [ "$extension" == ".vmdk" ]; then #./install_osx.sh [file.img]
+		dev="$1"
+		virtualdev=1
+		mediamenu
+	fi
+fi
+
+if [ "$extension" == ".pkg" ] || [ "$extension" == ".mpkg" ]; then #./install_osx.sh [file.pkg/mpkg]
+	if [ -z "$2" ] || [ "$2" == "" ] || [ "$2" == " " ]; then #no dest dir
+		usage
+		err_exit "Invalid Destination Folder\n"
+	fi
+	extract_pkg "$file" "$2"
+	exit 0
+	
+elif [ ! "$extension" == ".dmg" ] && [ ! "$extension" == ".img" ]; then
+		usage
+		err_exit "Invalid file specified\n"
+fi
+
+if [ -z "$dev" ] || [ "$dev" == "" ] || [ "$dev" == " " ]; then
+	usage
+	err_exit "You must specify a valid target drive or image\n"
+fi
+
+if [ ! -b "$dev" ]; then
+	isdev=$(echo "$dev" | grep -q "/dev/"; echo $?)
+	if [ "$isdev" == "0" ]; then
+		err_exit "No such device\n"
+	elif [ "$dextension" == ".img" ] || [ "$dextension" == ".vhd" ] || [ "$dextension" == ".vdi" ] || [ "$dextension" == ".vmdk" ]; then
+		vdev_check "$file" #switch to Virtual HDD mode & check
+	fi
+fi
+
+if [ -e $configfile ]; then
+	set_from_config		#read config file
+	check_config_vars	#check if config is valid
+fi
 if [ -z $commands_checked ]; then	commands_checked=0; fi
 if [ $commands_checked == 0 ]; then
 	check_commands	#Check all required commands exist
@@ -396,29 +508,10 @@ fi
 
 find_cmd "xar" "xar_bin/bin"
 find_cmd "dmg2img" "dmg2img_bin/usr/bin"
-if ! check_command 'dmg2img'  == 0; then
-		$lyellow; echo "Compiling dmg2img..."; $normal
-		compile_d2i
-else
-	c_d2iver=$(dmg2img 2>&1| grep v | sed -n 1p | awk '{print $2}' | sed 's/v//g')
-	if [ ! "$d2iver" == "$dmgimgversion" ] && [ "$dmg2img" == "dmg2img" ]; then
-		$lyellow; echo "WARNING! dmg2img is not updated and may cause problems"
-		echo "Detected version: "$d2iver""
-		echo "Recommanded version: "$dmgimgversion""
-		read -p "Compile version "$dmgimgversion"? (y/n)" -n1 -r
-		echo; $normal
-		if [[ $REPLY =~ ^[Yy]$ ]];then
-			$lyellow; echo "Compiling dmg2img..."; $normal
-			compile_d2i
-		fi
-	fi
-fi
+docheck_dmg2img
+docheck_xar
 
 do_init_qemu
-if [ ! -d /mnt/osx ]; then mkdir -p /mnt/osx; fi
-if [ ! -d /mnt/osx/esd ]; then mkdir /mnt/osx/esd; fi
-if [ ! -d /mnt/osx/base ]; then mkdir /mnt/osx/base; fi
-if [ ! -d /mnt/osx/target ]; then mkdir /mnt/osx/target; fi
 
 local iscdrom=$(echo "$1" | grep -q "/dev/sr[0-9]" ;echo $?)
 if [ -b "$1" ] && [ "$iscdrom" == "0" ]; then
@@ -443,52 +536,7 @@ if [ -b "$1" ] && [ "$iscdrom" == "0" ]; then
 	fi
 fi
 
-if [ -b "$1" ] && [ ! -f "$1" ] && [ ! -d "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then
-	dev="$1"
-	mediamenu
-#elif [ -f "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then
-#	virtualdev=1
-#	mediamenu
-fi
-
-name=$(basename "$1")
-extension=".${name##*.}"
-filename="${name%.*}"
-
-dname=$(basename "$2")
-dextension=".${dname##*.}"
-dfilename="${dname%.*}"
-
-if [ "$extension" == ".pkg" ] || [ "$extension" == ".mpkg" ]; then
-	if [ -z "$2" ] || [ "$2" == "" ] || [ "$2" == " " ]; then
-		usage
-		err_exit "Invalid Destination Folder\n"
-	fi
-	extract_pkg "$file" "$2"
-	exit 0
-elif [ ! -f "$file" ] || [ ! "$extension" == ".dmg" ]; then
-	if [ "$extension" == ".img" ] || [ "$extension" == ".vhd" ] || [ "$extension" == ".vdi" ] || [ "$extension" == ".vmdk" ]; then
-		vdev_check "$file"
-	else
-		usage
-		isdev=$(echo "$file" | grep -q '/dev/'; echo $?)
-		if [ "$isdev" == "0" ]; then
-			err_exit "No such device\n"
-		else
-			err_exit "Invalid file specified\n"
-		fi
-	fi
-fi
-if [ -z "$dev" ] || [ "$dev" == "" ] || [ "$dev" == " " ]; then
-	usage
-	err_exit "You must specify a valid target drive or image\n"
-fi
-
-if [ ! -b "$dev" ]; then
-	vdev_check "$dev"
-fi
-
-if [ $virtualdev == 1 ] && [ ! $vbhdd == 1 ]; then
+if [ $virtualdev == 1 ] && [ $vbhdd == 0 ]; then
 	$yellow; echo "Creating Image..."; $normal
 	dd if=/dev/zero bs=1 of="$dev"  seek="$size" count=0
 	sync; sync; sync; sync
@@ -606,7 +654,7 @@ if [ $virtualdev == 1 ] && [ $vbhdd == 0 ]; then
 	fi
 fi
 
-echo "Formatting partition as HFS+"
+$lyellow; echo "Formatting partition as HFS+"; $normal
 if [ $virtualdev == 1 ]; then
 	mkfs.hfsplus /dev/nbd0p1 -v "smx_installer"
 else
@@ -629,7 +677,7 @@ fi
 unset check_err
 fi
 
-echo "Mapping image with qemu..."
+$lyellow; echo "Mapping image with qemu..."; $normal
 if [ ! $nbd1_mapped == 1 ]; then
 	qemu_map "nbd1" "$outfile"
 	if [ ! $nbd1_mapped == 1 ]; then
@@ -637,22 +685,23 @@ if [ ! $nbd1_mapped == 1 ]; then
 	fi
 fi
 
-echo "Mounting Partitions..."
+$yellow; echo "Mounting Partitions..."; $normal
 if [ $virtualdev == 0 ]; then 
 	umount ""$dev"1"
 fi
 
-mount -t hfsplus /dev/nbd1p2 /mnt/osx/esd &>/dev/null
-if [ ! $? == 0 ]; then
-	mount -t hfsplus /dev/nbd1p3 /mnt/osx/esd &>/dev/null
-	if [ ! $? == 0 ]; then
+mount_part "/dev/nbd1p2" "esd"
+if [ ! "$mount_part_ret" == "err_success" ]; then
+	mount_part "/dev/nbd1p3" "esd"
+	if [ ! "$mount_part_ret" == "err_success" ]; then
 		err_exit "Cannot mount esd\n"
 	fi
 fi
 
 detect_osx_version
 
-if [[ ! "$osver" =~ "10.6" ]]; then
+echo "isAppStore = $isAppStore "
+if [ $isAppStore == 1 ]; then
 	outfile=""$filepath"/BaseSystem.img"
 	if [ ! -e "$outfile" ]; then
 		echo "Converting BaseSystem.dmg..."
@@ -670,26 +719,29 @@ if [[ ! "$osver" =~ "10.6" ]]; then
 		fi
 	fi
 
-	mount -t hfsplus /dev/nbd2p2 /mnt/osx/base
-	if [ ! $? == 0 ]; then
+	mount_part "/dev/nbd2p2" "base"
+	if [ ! "$mount_part_ret" == "err_success" ]; then
 		err_exit "Cannot mount BaseSystem\n"
 	fi
 	detect_osx_version
 fi
 
 if [ $virtualdev == 1 ]; then
-	mount -t hfsplus /dev/nbd0p1 /mnt/osx/target
+	mount_part "/dev/nbd0p1" "target"
 else
-	mount -t hfsplus ""$dev"1" /mnt/osx/target
+	mount_part ""$dev"1" "target"
 fi
-if [ ! $? == 0 ]; then
+if [ ! "$mount_part_ret" == "err_success" ]; then
 	err_exit "Cannot mount target\n"
-elif [ ! -d /mnt/osx/target/Extra ]; then
+fi
+if [ ! -d /mnt/osx/target/Extra ]; then
 	mkdir -p /mnt/osx/target/Extra/Extensions
 fi
 
 do_system
-docheck_mbr
+if [ "$patchmbr" == "true" ]; then
+	docheck_mbr
+fi
 sync
 
 #if [ ! $(ls -1 "$kextdir/*.kext" | wc -l) == 0 ]; then
@@ -789,6 +841,60 @@ function do_init_qemu(){
 	fi
 }
 
+function mount_part(){
+	local type=$2
+	local ismounted=$(mount | grep -q "$1"; echo $?)
+	mount_part_ret="err_success"
+	if [ "$ismounted" == "0" ] && [ "$3" == "remount" ]; then
+		umount "$1"
+		if [ ! "$?" == "0" ]; then
+			sleep 1
+			umount "$1"
+			if [ ! "$?" == "0" ]; then
+				mount_part_ret="err_umount"
+			fi
+		fi
+	sleep 0.1
+	elif [ "$ismounted" == "0" ] && [ ! "$3" == "remount" ]; then
+		$yellow; echo "Skipping mount, already mounted"; $normal
+	else
+		if [ "$3" == "silent" ]; then
+			mount "$1" -t hfsplus -o rw,force /mnt/osx/$type &>/dev/null 2>&1
+		else
+			mount "$1" -t hfsplus -o rw,force /mnt/osx/$type
+		fi
+		
+		if [ ! "$?" == "0" ]; then
+			sleep 1
+			if [ "$3" == "silent" ]; then
+				mount "$1" -t hfsplus -o rw,force /mnt/osx/$type &>/dev/null 2>&1
+			else
+				mount "$1" -t hfsplus -o rw,force /mnt/osx/$type
+			fi
+			
+			if [ ! "$?" == "0" ]; then
+				mount_part_ret="err_mount"
+			fi
+		fi
+	fi
+		
+	if [ "$type" == "target" ]; then
+		if [ ! $(touch /mnt/osx/target/check_ro; echo $?) == 0 ]; then
+			$lyellow; echo "Restoring volume..."; $normal
+			umount /mnt/osx/target
+			if [ $virtualdev == 1 ]; then
+				fsck.hfsplus -f -y /dev/nbd0p1
+				mount -t hfsplus -o rw,force /dev/nbd0p1 /mnt/osx/target
+			else
+				fsck.hfsplus -f -y ""$dev"1"
+				mount -t hfsplus -o rw,force ""$dev"1" /mnt/osx/target
+			fi
+		else
+			rm /mnt/osx/target/check_ro
+		fi
+	fi
+}
+
 function qemu_map(){
 	qemu-nbd -d /dev/"$1" &>/dev/null
 	sleep 0.3
@@ -803,7 +909,7 @@ function qemu_map(){
 
 function docheck_smbios(){
 if [ -f "$scriptdir/smbios.plist" ]; then
-	cp "$verbose2" "$scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
+	cp $verbose2 "$scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
 else
 	$lyellow; echo "Skipping smbios.plist, file not found"; $normal
 	if [[ ! "$osver" =~ "10.6" ]]; then
@@ -814,7 +920,7 @@ fi
 
 function docheck_dsdt(){
 if [ -f "$scriptdir/DSDT.aml" ]; then
-	cp "$verbose2" "$scriptdir/DSDT.aml" /mnt/osx/target/Extra/DSDT.aml
+	cp $verbose2 "$scriptdir/DSDT.aml" /mnt/osx/target/Extra/DSDT.aml
 else
 	$lred; echo "DSDT.aml not found!"; $normal
 	$lyellow; echo "Using system stock DSDT table"; $normal
@@ -856,13 +962,7 @@ local origver=$(cat "$scriptdir/tmp/osinstall_mbr/o/Distribution" | grep system.
 local origbuild=$(cat "$scriptdir/tmp/osinstall_mbr/o/Distribution" | grep pkg.Essentials | grep -o "version.*" | sed 's/version=//g;s|["/>]||g' | sed "s/'//g")
 local patchver=$(cat "$scriptdir/tmp/osinstall_mbr/p/Distribution" | grep system.version | grep -o 10.* | awk '{print $1}' | sed "s|['\)]||g")
 local patchbuild=$(cat "$scriptdir/tmp/osinstall_mbr/p/Distribution" | grep pkg.Essentials | grep -o "version.*" | sed 's/version=//g;s|["/>]||g' | sed "s/'//g")
-if [ ! "$origver" == "$osver" ]; then
-	printf "Package:\t$origver\nOS:\t$osver\n"
-	$lred; echo "WARNING: NOT APPLYING MBR PATCH"
-	echo "MPKG DOESN'T MATCH OS VERSION!"
-	$normal
-	dombr=0
-elif [ ! "$patchver" == "$osver" ] || [ ! "$patchver" == "$origver" ] || [ ! "$patchbuild" == "$origbuild" ]; then
+if [ ! "$patchver" == "$origver" ] || [ ! "$patchbuild" == "$origbuild" ]; then
 	$lred "WARNING: NOT APPLYING MBR PATCH"
 	echo "INCOMPATIBLE VERSIONS"
 	$lyellow
@@ -883,13 +983,13 @@ fi
 
 function do_mbr(){
 	$lyellow; echo "Patching Installer to support MBR"; $normal
-	cp "$verbose2" "$scriptdir/osinstall_mbr/OSInstall.mpkg" "/mnt/osx/target/System/Installation/Packages/OSInstall.mpkg"
-	cp "$verbose2" "$scriptdir/osinstall_mbr/OSInstall" "/mnt/osx/target/System/Library/PrivateFrameworks/Install.framework/Frameworks/OSInstall.framework/Versions/A/OSInstall"
+	cp $verbose2 "$scriptdir/osinstall_mbr/OSInstall.mpkg" "/mnt/osx/target/System/Installation/Packages/OSInstall.mpkg"
+	cp $verbose2 "$scriptdir/osinstall_mbr/OSInstall" "/mnt/osx/target/System/Library/PrivateFrameworks/Install.framework/Frameworks/OSInstall.framework/Versions/A/OSInstall"
 }
 
 function do_chameleon(){
 	$lyellow; echo "Installing chameleon..."; $normal
-	cp "$verbose2" "$scriptdir/chameleon/boot" /mnt/osx/target/
+	cp $verbose2 "$scriptdir/chameleon/boot" /mnt/osx/target/
 	sync
 	
 	if [ -d "$scriptdir/chameleon/Themes" ]; then
@@ -908,9 +1008,11 @@ function do_chameleon(){
 		echo "Installing Chameleon on Partition Only"; $normal
 	else
 		local do_instMBR=0
-		read -p "Do you want to install Chameleon on MBR? (y/n)" -n1 -r
-		echo
-		if [[ $REPLY =~ ^[Yy]$ ]];then do_instMBR=1; fi
+		if [ -z $chameleonmbr ]; then
+			read -p "Do you want to install Chameleon on MBR? (y/n)" -n1 -r
+			echo
+			if [[ $REPLY =~ ^[Yy]$ ]];then do_instMBR=1; fi
+		elif [ "$chameleonmbr" == "true" ]; then do_instMBR=1; fi
 	fi
 	if [ $virtualdev == 1 ]; then
 		if [ $do_instMBR == 1 ]; then
@@ -941,8 +1043,8 @@ function do_system(){
 		cp -pdR"$verbose" /mnt/osx/base/* /mnt/osx/target/
 		
 		$lyellow; echo "Copying installation packages to "$dev"..." ; $normal
-		rm "$verbose2" /mnt/osx/target/System/Installation/Packages
-		mkdir "$verbose2" /mnt/osx/target/System/Installation/Packages
+		rm $verbose2 /mnt/osx/target/System/Installation/Packages
+		mkdir $verbose2 /mnt/osx/target/System/Installation/Packages
 		cp -pdR"$verbose" /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
 		sync
 		$yellow; echo "Copying kernel..."; $normal
@@ -963,53 +1065,49 @@ function do_system(){
 }
 
 function detect_osx_version(){
+	isAppStore=0
 	if [ "$mediamenu" == "1" ]; then #look in target
 		$lyellow; echo "Scanning OSX version on $dev...";$normal
-		local verfile="/mnt/osx/target/System/Library/CoreServices/SystemVersion.plist"
-	else
+		local verfile="/mnt/osx/target/System/Library/CoreServices/SystemVersion.plist" #target
+	else #look in installer
 		$lyellow; echo "Scanning OSX version on DMG..."; $normal
-		local verfile="/mnt/osx/esd/System/Library/CoreServices/SystemVersion.plist"
+		local verfile="/mnt/osx/esd/System/Library/CoreServices/SystemVersion.plist" #assume dvd format
 	fi
-	if [ ! -f "$verfile" ]; then
-		if [ -f "/mnt/osx/esd/BaseSystem.dmg" ] && [ ! -f "/mnt/osx/base/System/Library/CoreServices/SystemVersion.plist" ]; then
-			osname="notsnow"
+	if [ ! -f "$verfile" ]; then #no dvd format
+		verfile="/mnt/osx/base/System/Library/CoreServices/SystemVersion.plist" #assume appstore format
+		if [ -f "/mnt/osx/esd/BaseSystem.dmg" ]; then #found appstore format
+			osname="AppStore"
 			osver="10.7+"
-		elif [ -f "/mnt/osx/base/System/Library/CoreServices/SystemVersion.plist" ] && [ ! "$mediamenu" == "1" ]; then
+			isAppStore=1
+		elif [ -f "$verfile" ] && [ ! "$mediamenu" == "1" ]; then
 			$lyellow; echo "Scanning OSX version on BaseSystem"; $normal
-			local verfile="/mnt/osx/base/System/Library/CoreServices/SystemVersion.plist"
-			osname=""
-			osver=""
-		elif [ "$mediamenu" == "1" ]; then
-			osname="none"
-			osver=""
-			$lred; echo "Warning: Can't detect OSX Build"; $normal
 		else
-			err_exit "Can't detect OSX Build\n"
+			err_exit "Can't detect OSX Version\n"
 		fi
 	fi
 	
 	local tq=0  #to quit
-if [ ! "$osname" == "notsnow" ] && [ ! "$osname" == "none" ]; then
+	if [ -f "$verfile" ]; then
 		osbuild=$(cat "$verfile" | grep -A1 "<key>ProductBuildVersion</key>" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
 		osver=$(cat "$verfile" | grep -A1 "<key>ProductVersion</key>" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
-	if [[ "$osver" =~ "10.6" ]]; then
-		osname="Snow Leopard"
-	elif [[ "$osver" =~ "10.7" ]]; then
-		osname="Lion"
-	elif [[ "$osver" =~ "10.8" ]]; then
-		osname="Mountain Lion"
-	elif [[ "$osver" =~ "10.9" ]]; then
-		osname="Mavericks"
-	elif [ ! "$osver" == "" ] && [ ! "$osbuild" == "" ]; then
-		osname="Not supported"
-		osver="version ($osver)"
-		local tq=1
-	else
-		osname="Unknown"
-		osver="version"
-		local tq=1
+		if [[ "$osver" =~ "10.6" ]]; then
+			osname="Snow Leopard"
+		elif [[ "$osver" =~ "10.7" ]]; then
+			osname="Lion"
+		elif [[ "$osver" =~ "10.8" ]]; then
+			osname="Mountain Lion"
+		elif [[ "$osver" =~ "10.9" ]]; then
+			osname="Mavericks"
+		elif [ ! "$osver" == "" ] && [ ! "$osbuild" == "" ]; then
+			osname="Not supported"
+			osver="version ($osver)"
+			local tq=1
+		else
+			osname="Unknown"
+			osver="version"
+			local tq=1
+		fi
 	fi
-fi
 
 	if [ $tq == 1 ]; then
 		err_exit "$osname $osver detected\n"
@@ -1144,7 +1242,7 @@ local target_umount=0
 
 	if [ ! $(mount | grep -q "/mnt/osx/esd"; echo $?) == 0 ]; then
 		if [ -d "/mnt/osx/esd" ] && [ $(ls -1 "/mnt/osx/esd" | wc -l ) == 0 ]; then
-			rm -r "/mnt/osx/esd"
+			yes | rm -r "/mnt/osx/esd"
 		fi
 		esd_umount=1
 	else
@@ -1152,7 +1250,7 @@ local target_umount=0
 	fi
 	if [ ! $(mount | grep -q "/mnt/osx/base"; echo $?) == 0 ]; then
 		if [ -d "/mnt/osx/base" ] && [ $(ls -1 "/mnt/osx/base" | wc -l ) == 0 ]; then
-			rm -r "/mnt/osx/base"
+			yes | rm -r "/mnt/osx/base"
 		fi
 		base_umount=1
 		else
@@ -1162,7 +1260,7 @@ local target_umount=0
 	
 	if [ ! $(mount | grep -q "/mnt/osx/target"; echo $?) == 0 ]; then
 		if [ -d "/mnt/osx/target" ] && [ $(ls -1 "/mnt/osx/target" | wc -l ) == 0 ]; then
-			rm -r "/mnt/osx/target"
+			yes | rm -r "/mnt/osx/target"
 		fi
 		target_umount=1
 		else
@@ -1170,7 +1268,7 @@ local target_umount=0
 		local target_umount=1
 	fi
 	if [ -d "/mnt/osx" ] && [ $(ls -1 "/mnt/osx" | wc -l) == 0 ]; then
-		rm -r "/mnt/osx"
+		yes | rm -r "/mnt/osx"
 	fi
 	if [ $esd_umount == 1 ] && [ $base_umount == 1 ] && [ $target_umount == 1 ]; then
 		if [ -b /dev/nbd0 ]; then
@@ -1224,29 +1322,7 @@ function extract_pkg(){
 	#	err_exit "Invalid Destination\n"
 	fi
 	if [ -z "$xar" ]; then
-		$lyellow; echo "Compiling xar..."; $normal
-		compile_xar
-		cd "$scriptdir"
-		cd "$dest"
-		$white; echo "Looking for compiled xar..."; $normal
-		find_cmd "xar" "xar_bin/bin"
-		if [ -z "$xar" ]; then
-			err_exit "Something wrong, xar command missing\n"
-		fi
-	else
-		local chkxar=$(xar --version 2>&1 | grep -q "libxar.so.1"; echo $?)
-		if [ $chkxar == 0 ]; then
-			$lyellow; echo "xar is not working. recompiling..."; $normal
-			rm -r xar_bin/*
-			$lyellow; echo "Recompiling xar..."; $normal
-			compile_xar
-			cd "$scriptdir"
-			cd "$dest"
-			local chkxar=$(xar -v 2>&1 | grep -q "libxar.so.1"; echo $?)
-			if [ $chkxar == 0 ]; then
-				err_exit "xar broken, cannot continue\n"
-			fi
-		fi
+		docheck_xar
 	fi
 	cd "$scriptdir"
 	local fullpath=$(cd $(dirname "$pkgfile"); pwd -P)/$(basename "$pkgfile")
@@ -1259,7 +1335,7 @@ function extract_pkg(){
 		if [ ! "$3" == "skip" ]; then
 			read -p "Do you want to remove temporary packed payloads? (y/n)" -n1 -r
 			echo
-			if [[ $REPLY =~ ^[Yy]$ ]];then
+			if [[ $REPLY =~ ^[Yy]$ ]] || [ "$pkg_keep_payloads" == "false" ];then
 				echo "Removing Packed Files..."
 				find . -type f -name "Payload" -delete
 				find . -type f -name "Scripts" -delete
@@ -1277,7 +1353,35 @@ function extract_pkg(){
 	chmod -R 666 "$dest"
 }
 
+function docheck_xar(){
+if [ -z "$xar" ]; then
+	compile_xar
+	cd "$scriptdir"
+	cd "$dest"
+	$white; echo "Looking for compiled xar..."; $normal
+	find_cmd "xar" "xar_bin/bin"
+	if [ -z "$xar" ]; then
+		err_exit "Something wrong, xar command missing\n"
+	fi
+else
+	local chkxar=$(xar --version 2>&1 | grep -q "libxar.so.1"; echo $?)
+	if [ $chkxar == 0 ]; then
+		$lyellow; echo "xar is not working. recompiling..."; $normal
+		rm -r xar_bin/*
+		$lyellow; echo "Recompiling xar..."; $normal
+		compile_xar
+		cd "$scriptdir"
+		cd "$dest"
+		local chkxar=$(xar -v 2>&1 | grep -q "libxar.so.1"; echo $?)
+		if [ $chkxar == 0 ]; then
+			err_exit "xar broken, cannot continue\n"
+		fi
+	fi
+fi
+}
+
 function compile_xar(){
+	$lyellow; echo "Compiling xar..."; $normal
 	xarver="1.5.2"
 	if [ ! -f "xar-"$xarver".tar.gz" ]; then
 		wget "http://xar.googlecode.com/files/xar-"$xarver".tar.gz"
@@ -1297,6 +1401,26 @@ function compile_xar(){
 		chown "$SUDO_USER" "$scriptdir/xar-"$xarver".tar.gz"
 		chown -R "$SUDO_USER" "$scriptdir/xar-"$xarver""
 		chown -R "$SUDO_USER" "$scriptdir/xar_bin"
+}
+
+function docheck_dmg2img(){
+if [ -z "$dmg2img" ]; then
+		$lyellow; echo "Compiling dmg2img..."; $normal
+		compile_d2i
+else
+	c_d2iver=$(dmg2img 2>&1| grep v | sed -n 1p | awk '{print $2}' | sed 's/v//g')
+	if [ ! "$d2iver" == "$dmgimgversion" ] && [ "$dmg2img" == "dmg2img" ]; then
+		$lyellow; echo "WARNING! dmg2img is not updated and may cause problems"
+		echo "Detected version: "$d2iver""
+		echo "Recommanded version: "$dmgimgversion""
+		read -p "Compile version "$dmgimgversion"? (y/n)" -n1 -r
+		echo; $normal
+		if [[ $REPLY =~ ^[Yy]$ ]];then
+			$lyellow; echo "Compiling dmg2img..."; $normal
+			compile_d2i
+		fi
+	fi
+fi
 }
 
 function compile_d2i(){
@@ -1322,6 +1446,47 @@ function compile_d2i(){
 	dmg2img="$scriptdir/dmg2img_bin/usr/bin/dmg2img"
 }
 
+#read config.cfg
+function set_from_config {
+	local confstream=$(cat config.cfg | sed '/#/d;/\//d;/^$/d')
+	for setting in 'bootloader' 'partitiontable' 'patchmbr' 'chameleonmbr' 'pkg_keep_payloads' 'keep_imgfiles' 'compile_dmg2img' 'compile_xar' 'img2vdi' 'keep_diskimg'; do
+		parseconfig "$setting"
+	done
+
+	}
+
+function parseconfig(){
+	local setting="$1"
+	eval ${setting}=$(echo $confstream | grep -o $setting=.* | sed "s/$setting=//g;s/\ .*//g")
+}
+
+function check_config_vars {
+boolvars=('patchmbr' 'chameleonmbr' 'pkg_keep_payloads' 'keep_imgfiles' 'compile_dmg2img' 'compile_xar' 'img2vdi' 'keep_diskimg')
+for var in "${boolvars[@]}"; do
+if [ $really_verbose == 1 ]; then echo "var: ${var} - val: ${!var}"; fi
+	#if [ -z ${!var} ]; then
+	#	$lred; echo "ERROR! Bad Config File.		$var is not defined"; $normal
+	#	cleanup
+	#	exit
+	#el
+	if [ ${!var} != "false" ] && [ ${!var} != "true" ]; then
+		$lred; echo "ERROR! Bad Config File.		$var can only be true or false		current value is ${!var}"; $normal
+		cleanup
+		exit
+	fi
+done
+
+strvars=('bootloader' 'partitiontable')
+for var in "${strvars[@]}"; do
+if [ $really_verbose == 1 ]; then echo "var: ${var} - val: ${!var}"; fi
+	#if [ -z "${!var}" ]; then
+	#	$lred; echo "ERROR! Bad Config File.		${var} is not defined"; $normal
+	#	cleanup
+	#	exit
+	#fi
+done
+}
+
 function usage(){
 echo "Osx Installer/Utilities for Linux by SMX"
 printf "$0 [dmgfile] [dev]\t\tConverts and install a dmg to a device\n"
@@ -1332,6 +1497,7 @@ printf "$0 [pkg/mpkg] [destdir]\t\tExtract a package to destdir\n"
 printf "$0 [dev]\t\t\t\tShow Management Menu for setup media\n"
 printf "Management menu:\n"
 printf "\t-Install/Remove extra kexts\n"
+printf "\t-Install/Remove chameleon Modules\n"
 printf "\t-Install/Remove extra kernels\n"
 printf "\t-Install/Reinstall chameleon\n"
 printf "\t-Install/Reinstall mbr patch\n"
