@@ -841,43 +841,57 @@ function do_init_qemu(){
 	fi
 }
 
+function domount_part(){
+if [ "$3" == "silent" ]; then
+	mount "$1" -t hfsplus -o rw,force /mnt/osx/$type &>/dev/null 2>&1
+else
+	mount "$1" -t hfsplus -o rw,force /mnt/osx/$type
+fi
+
+if [ ! "$?" == "0" ]; then
+	sleep 1
+	if [ "$3" == "silent" ]; then
+		mount "$1" -t hfsplus -o rw,force /mnt/osx/$type &>/dev/null 2>&1
+	else
+		mount "$1" -t hfsplus -o rw,force /mnt/osx/$type
+	fi
+	if [ ! "$?" == "0" ]; then
+		mount_part_ret="err_mount"
+	fi
+fi
+}
+
 function mount_part(){
 	local type=$2
 	local ismounted=$(mount | grep -q "$1"; echo $?)
+	local mountloc=$(mount | grep "$1" | grep -q '/mnt/osx/'; echo $?)
 	mount_part_ret="err_success"
-	if [ "$ismounted" == "0" ] && [ "$3" == "remount" ]; then
-		umount "$1"
-		if [ ! "$?" == "0" ]; then
-			sleep 1
-			umount "$1"
-			if [ ! "$?" == "0" ]; then
-				mount_part_ret="err_umount"
-			fi
-		fi
-	sleep 0.1
-	elif [ "$ismounted" == "0" ] && [ ! "$3" == "remount" ]; then
-		$yellow; echo "Skipping mount, already mounted"; $normal
-	else
+	if [ "$ismounted" == "0" ] && [ ! "$mountloc" == "0" ] || [ "$3" == "remount" ]; then
 		if [ "$3" == "silent" ]; then
-			mount "$1" -t hfsplus -o rw,force /mnt/osx/$type &>/dev/null 2>&1
+			umount "$1" &>/dev/null 2>&1
 		else
-			mount "$1" -t hfsplus -o rw,force /mnt/osx/$type
+			umount "$1"
 		fi
 		
 		if [ ! "$?" == "0" ]; then
 			sleep 1
 			if [ "$3" == "silent" ]; then
-				mount "$1" -t hfsplus -o rw,force /mnt/osx/$type &>/dev/null 2>&1
+				umount "$1" &>/dev/null 2>&1
 			else
-				mount "$1" -t hfsplus -o rw,force /mnt/osx/$type
+				umount "$1"
 			fi
-			
 			if [ ! "$?" == "0" ]; then
-				mount_part_ret="err_mount"
+				mount_part_ret="err_umount"
 			fi
 		fi
+	sleep 0.1
+	domount_part "$1" "$2" "$3"
+	elif [ "$mountloc" == "0" ] || [ "$ismounted" == "0" ] && [ ! "$3" == "remount" ]; then
+		$yellow; echo "Skipping mount, already mounted"; $normal
+	else
+		domount_part "$1" "$2" "$3"
 	fi
-		
+	
 	if [ "$type" == "target" ]; then
 		if [ ! $(touch /mnt/osx/target/check_ro; echo $?) == 0 ]; then
 			$lyellow; echo "Restoring volume..."; $normal
@@ -1066,12 +1080,13 @@ function do_system(){
 
 function detect_osx_version(){
 	isAppStore=0
+	local verfile
 	if [ "$mediamenu" == "1" ]; then #look in target
 		$lyellow; echo "Scanning OSX version on $dev...";$normal
-		local verfile="/mnt/osx/target/System/Library/CoreServices/SystemVersion.plist" #target
+		verfile="/mnt/osx/target/System/Library/CoreServices/SystemVersion.plist" #target
 	else #look in installer
 		$lyellow; echo "Scanning OSX version on DMG..."; $normal
-		local verfile="/mnt/osx/esd/System/Library/CoreServices/SystemVersion.plist" #assume dvd format
+		verfile="/mnt/osx/esd/System/Library/CoreServices/SystemVersion.plist" #assume dvd format
 	fi
 	if [ ! -f "$verfile" ]; then #no dvd format
 		verfile="/mnt/osx/base/System/Library/CoreServices/SystemVersion.plist" #assume appstore format
