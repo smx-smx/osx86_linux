@@ -469,6 +469,11 @@ elif [ -f "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then #./install_osx.sh [file]
 	fi
 fi
 
+find_cmd "xar" "xar_bin/bin"
+find_cmd "dmg2img" "dmg2img_bin/usr/bin"
+docheck_dmg2img
+docheck_xar
+
 if [ "$extension" == ".pkg" ] || [ "$extension" == ".mpkg" ]; then #./install_osx.sh [file.pkg/mpkg]
 	if [ -z "$2" ] || [ "$2" == "" ] || [ "$2" == " " ]; then #no dest dir
 		usage
@@ -507,11 +512,6 @@ if [ $commands_checked == 0 ]; then
 	export commands_checked
 fi
 
-find_cmd "xar" "xar_bin/bin"
-find_cmd "dmg2img" "dmg2img_bin/usr/bin"
-docheck_dmg2img
-docheck_xar
-
 local iscdrom=$(echo "$1" | grep -q "/dev/sr[0-9]" ;echo $?)
 if [ -b "$1" ] && [ "$iscdrom" == "0" ]; then
 	$lgreen; echo "CD Source Device Detected"; $normal
@@ -537,6 +537,13 @@ fi
 
 if [ $virtualdev == 1 ] && [ $vbhdd == 0 ]; then
 	$yellow; echo "Creating Image..."; $normal
+	if [ -f "$dev" ]; then
+		$lred; read -p "Image $dev already exists. Overwrite? (y/n)" -n1 -r
+		echo; $normal
+		if [[ $REPLY =~ ^[Nn]$ ]];then
+			err_exit ""
+		fi
+	fi
 	dd if=/dev/zero bs=1 of="$dev"  seek="$size" count=0
 	sync; sync; sync; sync
 	if [ ! $? == 0 ]; then
@@ -767,7 +774,7 @@ docheck_dsdt
 
 if [ $virtualdev == 1 ]; then
 	chmod 666 "$dev"
-	chown "$SUDO_USER" "$dev"
+	chown "$SUDO_USER":"$SUDO_USER" "$dev"
 fi
 sync
 cleanup
@@ -780,8 +787,8 @@ if [ $virtualdev == 1 ] && [ "$dextension" == ".img" ] || [ "$dextension" == ".h
 		if [ ! $? == 0 ] || [ ! -f ""$devpath/$dfilename".vdi" ]; then
 			err_exit "Conversion Failed\n"
 		else
-			chmod 666 "$devpath/$dfilename".vdi"
-			chown "$SUDO_USER" "$devpath/$dfilename".vdi"
+			chmod 666 "$devpath/$dfilename".vdi
+			chown "$SUDO_USER":"$SUDO_USER" "$devpath/$dfilename".vdi
 			read -p "Do you want to delete the img file? (y/n)" -n1 -r
 			echo
 			if [[ $REPLY =~ ^[Yy]$ ]];then
@@ -1007,11 +1014,11 @@ function do_chameleon(){
 	
 	if [ -d "$scriptdir/chameleon/Themes" ]; then
 		$yellow; echo "Copying Themes..."; $normal
-		cp -R "$scriptdir/chameleon/Themes" "/mnt/osx/target/Extra/Themes"
+		cp -R "$scriptdir/chameleon/Themes" "/mnt/osx/target/Extra/"
 	fi
 	if [ -d "$scriptdir/chameleon/Modules" ]; then
 		$yellow; echo "Copying Modules..."; $normal
-		cp -R "$scriptdir/chameleon/Modules" "/mnt/osx/target/Extra/Modules"
+		cp -R "$scriptdir/chameleon/Modules" "/mnt/osx/target/Extra/"
 	fi
 	sync
 	
@@ -1335,9 +1342,6 @@ function extract_pkg(){
 	#	usage
 	#	err_exit "Invalid Destination\n"
 	fi
-	if [ -z "$xar" ]; then
-		docheck_xar
-	fi
 	cd "$scriptdir"
 	local fullpath=$(cd $(dirname "$pkgfile"); pwd -P)/$(basename "$pkgfile")
 	cd "$dest"
@@ -1363,8 +1367,8 @@ function extract_pkg(){
 		fi
 	fi
 	cd "$scriptdir"
-	chown -R "$SUDO_USER" "$dest"
-	chmod -R 666 "$dest"
+	chown -R "$SUDO_USER":"$SUDO_USER" "$dest"
+	chmod -R 777 "$dest"
 }
 
 function docheck_xar(){
@@ -1378,7 +1382,7 @@ if [ -z "$xar" ]; then
 		err_exit "Something wrong, xar command missing\n"
 	fi
 else
-	local chkxar=$(xar --version 2>&1 | grep -q "libxar.so.1"; echo $?)
+	local chkxar=$($xar --version 2>&1 | grep -q "libxar.so.1"; echo $?)
 	if [ $chkxar == 0 ]; then
 		$lyellow; echo "xar is not working. recompiling..."; $normal
 		rm -r xar_bin/*
@@ -1386,7 +1390,7 @@ else
 		compile_xar
 		cd "$scriptdir"
 		cd "$dest"
-		local chkxar=$(xar -v 2>&1 | grep -q "libxar.so.1"; echo $?)
+		local chkxar=$($xar -v 2>&1 | grep -q "libxar.so.1"; echo $?)
 		if [ $chkxar == 0 ]; then
 			err_exit "xar broken, cannot continue\n"
 		fi
@@ -1412,9 +1416,9 @@ function compile_xar(){
 			err_exit "Xar Build Failed\n"
 		fi
 		make install
-		chown "$SUDO_USER" "$scriptdir/xar-"$xarver".tar.gz"
-		chown -R "$SUDO_USER" "$scriptdir/xar-"$xarver""
-		chown -R "$SUDO_USER" "$scriptdir/xar_bin"
+		chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver".tar.gz"
+		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver""
+		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar_bin"
 }
 
 function docheck_dmg2img(){
@@ -1422,7 +1426,7 @@ if [ -z "$dmg2img" ]; then
 		$lyellow; echo "Compiling dmg2img..."; $normal
 		compile_d2i
 else
-	c_d2iver=$(dmg2img 2>&1| grep v | sed -n 1p | awk '{print $2}' | sed 's/v//g')
+	c_d2iver=$($dmg2img 2>&1| grep v | sed -n 1p | awk '{print $2}' | sed 's/v//g')
 	if [ ! "$d2iver" == "$dmgimgversion" ] && [ "$dmg2img" == "dmg2img" ]; then
 		$lyellow; echo "WARNING! dmg2img is not updated and may cause problems"
 		echo "Detected version: "$d2iver""
@@ -1454,9 +1458,9 @@ function compile_d2i(){
 			$lgreen; echo "Build completed!"; $normal
 		fi
 		DESTDIR="$scriptdir/dmg2img_bin" make install
-		chown "$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion".tar.gz"
-		chown -R "$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion""
-		chown -R "$SUDO_USER" "$scriptdir/dmg2img_bin"
+		chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion".tar.gz"
+		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion""
+		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img_bin"
 	dmg2img="$scriptdir/dmg2img_bin/usr/bin/dmg2img"
 }
 
