@@ -324,8 +324,8 @@ printf "Choose a kernel to Install / Reinstall: "
 function vdev_check(){
 echo "Virtual HDD Image Mode"
 	virtualdev=1
-	touchedfile=0
-	deletedfile=0
+	local touchedfile=0
+	local deletedfile=0
 	if ! check_command 'qemu-nbd' == 0; then
 		err_exit ""
 	fi
@@ -366,8 +366,8 @@ echo "Virtual HDD Image Mode"
 		vbhdd=1; format=VHD
 	elif [ ! -f "$1" ] && [ "$dextension" == ".vmdk" ]; then
 		vbhdd=1; format=VMDK
-	elif [ -f "$1" ]; then
-		dev=$1
+	elif [ -f "$file" ] && [ -z "$dev" ]; then
+		dev=$file
 		clear; mediamenu
 		#err_exit "$1 already exists. Exiting\n"
 	#else
@@ -426,6 +426,7 @@ for ((c=0;c<3;c++)); do
 	local vartmp="nbd"$c"_mapped"
 	eval ${vartmp}=0
 done
+do_init_qemu
 
 ##File Details
 #name --> filename.extension
@@ -461,7 +462,7 @@ elif [ -f "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then #./install_osx.sh [file]
 	if [ "$extension" == ".dmg" ]; then #./install_osx.sh [file.dmg]
 		usage
 		err_exit "You must specify a valid target drive or image\n"
-	elif [ "$extension" == ".img" ] || [ "$extension" == ".vhd" ] || [ "$extension" == ".vdi" ] || [ "$extension" == ".vmdk" ]; then #./install_osx.sh [file.img]
+	elif [ "$extension" == ".img" ] || [ "$extension" == ".hdd" ] || [ "$extension" == ".vhd" ] || [ "$extension" == ".vdi" ] || [ "$extension" == ".vmdk" ]; then #./install_osx.sh [file.img]
 		dev="$1"
 		virtualdev=1
 		mediamenu
@@ -490,8 +491,8 @@ if [ ! -b "$dev" ]; then
 	isdev=$(echo "$dev" | grep -q "/dev/"; echo $?)
 	if [ "$isdev" == "0" ]; then
 		err_exit "No such device\n"
-	elif [ "$dextension" == ".img" ] || [ "$dextension" == ".vhd" ] || [ "$dextension" == ".vdi" ] || [ "$dextension" == ".vmdk" ]; then
-		vdev_check "$file" #switch to Virtual HDD mode & check
+	elif [ "$dextension" == ".img" ] || [ "$dextension" == ".hdd" ] || [ "$dextension" == ".vhd" ] || [ "$dextension" == ".vdi" ] || [ "$dextension" == ".vmdk" ]; then
+		vdev_check "$2" #switch to Virtual HDD mode & check
 	fi
 fi
 
@@ -510,8 +511,6 @@ find_cmd "xar" "xar_bin/bin"
 find_cmd "dmg2img" "dmg2img_bin/usr/bin"
 docheck_dmg2img
 docheck_xar
-
-do_init_qemu
 
 local iscdrom=$(echo "$1" | grep -q "/dev/sr[0-9]" ;echo $?)
 if [ -b "$1" ] && [ "$iscdrom" == "0" ]; then
@@ -773,7 +772,7 @@ fi
 sync
 cleanup
 echo "All Done!"
-if [ $virtualdev == 1 ] && [ "$dextension" == ".img" ]; then
+if [ $virtualdev == 1 ] && [ "$dextension" == ".img" ] || [ "$dextension" == ".hdd" ]; then
 	read -p "Do you want to convert virtual image to a VDI file? (y/n)" -n1 -r
 	echo
 	if [[ $REPLY =~ ^[Yy]$ ]];then
