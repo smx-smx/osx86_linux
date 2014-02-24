@@ -1,23 +1,23 @@
 #!/bin/bash
-normal='tput sgr0'
-bold='setterm -bold'
+export normal='tput sgr0'
+export bold='setterm -bold'
 
-red='printf \033[00;31m'
-green='printf \033[00;32m'
-yellow='printf \033[00;33m'
-blue='printf \033[00;34m'
-purple='printf \033[00;35m'
-cyan='printf \033[00;36m'
-lightgray='printf \033[00;37m'
-lred='printf \033[01;31m'
-lgreen='printf \033[01;32m'
-lyellow='printf \033[01;33m'
-lblue='printf \033[01;34m'
-lpurple='printf \033[01;35m'
-lcyan='printf \033[01;36m'
-white='printf \033[01;37m'
+export red='printf \033[00;31m'
+export green='printf \033[00;32m'
+export yellow='printf \033[00;33m'
+export blue='printf \033[00;34m'
+export purple='printf \033[00;35m'
+export cyan='printf \033[00;36m'
+export lightgray='printf \033[00;37m'
+export lred='printf \033[01;31m'
+export lgreen='printf \033[01;32m'
+export lyellow='printf \033[01;33m'
+export lblue='printf \033[01;34m'
+export lpurple='printf \033[01;35m'
+export lcyan='printf \033[01;36m'
+export white='printf \033[01;37m'
 
-program_revision=17
+program_revision=21
 configfile="config.cfg"
 
 if [ -z $really_verbose ]; then really_verbose=0; fi
@@ -31,6 +31,7 @@ else
 fi
 trap err_exit SIGINT
 
+workdir=$(pwd -P)
 scriptdir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P)"
 cd $scriptdir
 
@@ -83,15 +84,16 @@ fi
 detect_osx_version
 echo "Working on "$dev""
 echo "Choose an operation..."
-echo "1 - Manage kexts"
-echo "2 - Manage chameleon Modules"
-echo "3 - Manage kernels"
-echo "4 - Reinstall / Update chameleon"
-echo "5 - Install / Reinstall MBR Patch"
-echo "6 - Install / Reinstall Custom DSDT"
-echo "7 - Install / Reinstall SMBios"
-echo "8 - Erase Setup"
-echo "9 - Delete Kext Cache"
+echo "1  - Manage kexts"
+echo "2  - Manage chameleon Modules"
+echo "3  - Manage kernels"
+echo "4  - Reinstall / Update chameleon"
+echo "5  - Install / Reinstall MBR Patch"
+echo "6  - Install / Reinstall Custom DSDT"
+echo "7  - Install / Reinstall SMBios"
+echo "8  - Erase Setup"
+echo "9  - Delete Kext Cache"
+echo "10 - Tweaks Menu"
 echo "0 - Exit"
 $white; printf "Choose an option: "; read choice; $normal
 case "$choice" in
@@ -161,11 +163,54 @@ case "$choice" in
 		do_remcache
 		mediamenu
 		;;
+	10)
+		clear
+		tweakmenu
+		mediamenu
+		;;
 	*)
 		pause "Invalid option, press [enter] to try again"
 		clear
 		mediamenu
 esac
+}
+
+function tweakmenu(){
+tweaks=$(find "$scriptdir/tweaks" -maxdepth 1 -type f -name "*.sh" | wc -l)
+if [ $tweaks == 0 ]; then
+	$lred; echo "No tweak to install"; $normal
+	pause "Press [enter] to return to menu"
+	mediamenu
+fi
+printf "Choose a tweak to apply: "
+	local t
+	local estdir=$(echo "$scriptdir/tweaks" | sed 's/\ /\\\//g;s/\//\\\//g')
+	$white; echo "0 - Return to main menu"; $normal
+	for t in `seq $tweaks`; do
+		local option=$(find "$scriptdir/tweaks" -maxdepth 1 -type f -not -name ".gitignore" -name "*.sh" | sed "s/$estdir\///g" | sed -n "$t"p)
+		local tname=$(grep tweakname= $scriptdir/tweaks/$option | grep -o "=.*" | sed 's|[="]||g')
+			eval tweak$t="$option"
+			printf "$t - $tname\n"
+	done
+	$white; echo "Choose a tweak to apply"; $normal
+	read choice
+	local name="tweak$choice"
+	if [ "$choice" == "0" ]; then
+		clear
+		mediamenu
+	fi
+	if [ -z "${!name}" ]; then
+		pause "Invalid option, press [enter] to try again"
+		clear
+		tweakmenu
+	else
+	clear
+		$yellow; echo "Applying ${!name}..."; $normal
+		chmod +x "$scriptdir/tweaks/${!name}"
+		bash "$scriptdir/tweaks/${!name}"
+	fi
+	$lgreen; echo "Done!"; $normal
+	tweakmenu
 }
 
 function kextmenu(){
@@ -207,6 +252,7 @@ printf "Choose a kext to Install / Reinstall: "
 		else
 			$yellow; echo "Installing ${!name}..."; $normal
 			cp -R "$kextdir/${!name}" /mnt/osx/target/Extra/Extensions/
+			chown -R 0:0 "/mnt/osx/target/Extra/Extensions/${!name}"
 			chmod -R 755 "/mnt/osx/target/Extra/Extensions/${!name}"
 		fi
 	fi
@@ -393,6 +439,12 @@ $normal
 echo "Version: r$program_revision"
 
 export -f payload_extractor
+export -f do_remcache
+export -f do_kextperms
+export -f docheck_smbios
+export -f docheck_dsdt
+export -f docheck_mbr
+export -f mount_part
 mediamenu=0
 
 if [ -z $SUDO_USER ]; then
@@ -455,6 +507,11 @@ dname=$(basename "$2") #output
 dextension=".${dname##*.}"
 dfilename="${dname%.*}"
 
+find_cmd "xar" "xar_bin/bin"
+find_cmd "dmg2img" "dmg2img_bin/usr/bin"
+docheck_dmg2img
+docheck_xar
+
 if [ -b "$1" ] && [ ! -f "$1" ] && [ ! -d "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then #./install_osx.sh [dev]
 	dev="$1"
 	mediamenu
@@ -467,12 +524,9 @@ elif [ -f "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then #./install_osx.sh [file]
 		virtualdev=1
 		mediamenu
 	fi
+elif [ ! -b "$1" ] && [ ! -f "$1" ] && [ ! -d "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then
+	err_exit "No such device \n"
 fi
-
-find_cmd "xar" "xar_bin/bin"
-find_cmd "dmg2img" "dmg2img_bin/usr/bin"
-docheck_dmg2img
-docheck_xar
 
 if [ "$extension" == ".pkg" ] || [ "$extension" == ".mpkg" ]; then #./install_osx.sh [file.pkg/mpkg]
 	if [ -z "$2" ] || [ "$2" == "" ] || [ "$2" == " " ]; then #no dest dir
@@ -745,7 +799,7 @@ if [ ! -d /mnt/osx/target/Extra ]; then
 fi
 
 do_system
-if [ "$patchmbr" == "true" ]; then
+if [ ! "$patchmbr" == "false" ]; then
 	docheck_mbr
 fi
 sync
@@ -759,6 +813,7 @@ sync
 			#cp -Rv "$kext" /mnt/osx/target/System/Library/Extensions/
 			#chmod -R 755 "/mnt/osx/target/System/Library/Extensions/$(basename $kext)"
 			cp -R"$verbose" "$kext" /mnt/osx/target/Extra/Extensions/
+			chown -R 0:0 "/mnt/osx/target/Extra/Extensions/$(basename $kext)"
 			chmod -R 755 "/mnt/osx/target/Extra/Extensions/$(basename $kext)"
 		done
 	else
@@ -768,6 +823,7 @@ sync
 #fi
 
 do_remcache
+do_kextperms
 docheck_chameleon
 docheck_smbios
 docheck_dsdt
@@ -999,6 +1055,16 @@ $lyellow; echo "Deleting Kext Cache..."; $normal
 if [ -f /mnt/osx/target/System/Library/Caches/kernelcache ]; then
 	rm /mnt/osx/target/System/Library/Caches/kernelcache
 fi
+}
+
+function do_kextperms(){
+$lyellow; echo "Repairing Kext Permissions..."; $normal
+find /mnt/osx/target/System/Library/Extensions/ -type d -name "*.kext" | while read kext; do
+	#echo "Fixing ... $kext"
+	chmod -R 755 "$kext"
+	chown -R 0:0 "$kext"
+done
+$lgreen; echo "Done"; $normal
 }
 
 function do_mbr(){
@@ -1336,15 +1402,24 @@ function extract_pkg(){
 	cd "$scriptdir"
 	pkgfile="$1"
 	dest="$2"
-	if [ ! -d "$dest" ] && [ ! -e "$dest" ]; then
-		mkdir -p "$dest"
+	
 	#elif [ ! $(ls "$dest" | wc -l) == 0 ]; then
 	#	usage
 	#	err_exit "Invalid Destination\n"
-	fi
+	#fi
 	cd "$scriptdir"
+	if [[ ! "$dest" = /* ]]; then
+		dest="$workdir/$dest"
+	fi
+	if [ ! -d "$dest" ] && [ ! -e "$dest" ]; then mkdir -p "$dest"; fi
+	
+	if [[ ! "$pkgfile" = /* ]]; then
+		cd "$workdir"
+		local fullpath="$workdir/$pkgfile/$(basename "$pkgfile")"
+	fi
 	local fullpath=$(cd $(dirname "$pkgfile"); pwd -P)/$(basename "$pkgfile")
 	cd "$dest"
+	$yellow; echo "Extracting $1"; $normal
 	$xar -xf  "$fullpath"
 	local pkgext=".${pkgfile##*.}"
 	if [ "$pkgext" == ".pkg" ]; then
