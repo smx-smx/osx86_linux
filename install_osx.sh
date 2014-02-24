@@ -1102,7 +1102,7 @@ function do_chameleon(){
 	fi
 	if [ $virtualdev == 1 ]; then
 		if [ $do_instMBR == 1 ]; then
-			dd bs=440 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="/dev/nbd0"
+			dd bs=446 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="/dev/nbd0"
 			sleep 0.5
 			sync
 		fi
@@ -1113,7 +1113,7 @@ function do_chameleon(){
 		sleep 0.5
 	else
 		if [ $do_instMBR == 1 ]; then
-			dd bs=440 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="$dev"
+			dd bs=446 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="$dev"
 		fi
 		dd if="$scriptdir/chameleon/boot1h" of=""$dev"1"
 	fi
