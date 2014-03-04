@@ -17,7 +17,7 @@ export lpurple='printf \033[01;35m'
 export lcyan='printf \033[01;36m'
 export white='printf \033[01;37m'
 
-program_revision=21
+program_revision=23
 configfile="config.cfg"
 
 if [ -z $really_verbose ]; then really_verbose=0; fi
@@ -390,10 +390,6 @@ echo "Virtual HDD Image Mode"
 	if [ ! "$checkro" == "0" ] && [ ! "$checkro" == "1" ]; then
 		err_exit "Can't get readonly flag\n"
 	fi
-	if [ $touchedfile == 1 ] && [ -f "$1" ]; then
-		rm "$1"
-		deletedfile=1
-	fi
 	if [ $checkro == 1 ]; then
 		err_exit "Can't write image on read only filesystem\n"
 	fi
@@ -420,16 +416,29 @@ echo "Virtual HDD Image Mode"
 	#	err_exit "Unknown Error!\n"
 	fi
 	if [ "$size" == "" ] || [ "$size" == " " ] || [ -z $size ]; then
-		size=$((10 * 1024 * 1024 * 1024)) #10gb
+		if [ $mkrecusb == 1 ]; then
+			size=$((400 * 1024 * 1024)) #400
+		else
+			size=$((10 * 1024 * 1024 * 1024)) #10gb
+		fi
 	fi
-	check_space "$file" "$size" 1
+	check_space "$dev" "$size" 1
 	isdev=$(echo "$1" | grep -q "/dev/"; echo $?)
 	if [ $isdev == 0 ]; then
 		err_exit "Something wrong, not going to erase $dev\n"
 	fi
+	if [ $touchedfile == 1 ] && [ -f "$1" ]; then
+		rm "$1"
+		deletedfile=1
+	fi
 }
 
 function main(){
+if [ "$1" == "guictl" ]; then
+	"$2" "${*:2}"
+	return 0
+fi
+
 $lgreen; printf "OSX Install Media Maker by "
 $lyellow; printf "S"
 $lblue; printf "M"
@@ -445,6 +454,8 @@ export -f docheck_smbios
 export -f docheck_dsdt
 export -f docheck_mbr
 export -f mount_part
+
+export -f check_commands
 mediamenu=0
 
 if [ -z $SUDO_USER ]; then
@@ -458,8 +469,8 @@ fi
 
 kextdir="$scriptdir/extra_kexts"
 kerndir="$scriptdir/kernels"
-filepath="$( cd "$( dirname "$1" )" && pwd -P)"
-devpath="$( cd "$( dirname "$2" )" && pwd -P)"
+filepath="$( cd "$( dirname "$1" 2>/dev/null)" && pwd -P)"
+devpath="$( cd "$( dirname "$2" 2>/dev/null)" && pwd -P)"
 script=$scriptdir
 script+=/$(basename $0)
 
@@ -499,7 +510,7 @@ if [ "$(id -u)" != "0" ]; then
    err_exit "This script must be run as root\n"
 fi
 
-name=$(basename "$1") #input
+name=$(basename "$1" 2>/dev/null) #input
 extension=".${name##*.}"
 filename="${name%.*}"
 
@@ -512,6 +523,7 @@ find_cmd "dmg2img" "dmg2img_bin/usr/bin"
 docheck_dmg2img
 docheck_xar
 
+mkrecusb=0
 if [ -b "$1" ] && [ ! -f "$1" ] && [ ! -d "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then #./install_osx.sh [dev]
 	dev="$1"
 	mediamenu
@@ -534,11 +546,16 @@ if [ "$extension" == ".pkg" ] || [ "$extension" == ".mpkg" ]; then #./install_os
 		err_exit "Invalid Destination Folder\n"
 	fi
 	extract_pkg "$file" "$2"
-	exit 0
-	
+	err_exit ""
+
 elif [ ! "$extension" == ".dmg" ] && [ ! "$extension" == ".img" ]; then
-		usage
-		err_exit "Invalid file specified\n"
+		if [ "$1" == "--mkchameleon" ]; then
+			mkrecusb=1
+			bootloader="chameleon"
+		else
+			usage
+			err_exit "Invalid file specified\n"
+		fi
 fi
 
 if [ -z "$dev" ] || [ "$dev" == "" ] || [ "$dev" == " " ]; then
@@ -589,6 +606,114 @@ if [ -b "$1" ] && [ "$iscdrom" == "0" ]; then
 	fi
 fi
 
+do_preptarget
+if [ $mkrecusb == 1 ]; then
+	do_finalize
+	err_exit ""
+fi
+
+outfile=""$filepath/$filename".img"
+if [ ! -e "$outfile" ]; then
+	echo "Converting "$file" to img..."
+	$dmg2img "$file" "$outfile"
+#check_err=$(cat /tmp/dmg2img.log | grep -q "ERROR:"; echo $?)
+#if [ ! $? == 0 ] || [ ! -f "$outfile" ] || [ $check_err == 0 ]; then
+if [ ! $? == 0 ] || [ ! -f "$outfile" ]; then
+	rm "$outfile"
+	err_exit "Img conversion failed\n"
+fi
+unset check_err
+fi
+
+$lyellow; echo "Mapping image with qemu..."; $normal
+if [ ! $nbd1_mapped == 1 ]; then
+	qemu_map "nbd1" "$outfile"
+	if [ ! $nbd1_mapped == 1 ]; then
+		err_exit "Error during image mapping\n"
+	fi
+fi
+
+$yellow; echo "Mounting Partitions..."; $normal
+
+mount_part "/dev/nbd1p2" "esd"
+if [ ! "$mount_part_ret" == "err_success" ]; then
+	mount_part "/dev/nbd1p3" "esd"
+	if [ ! "$mount_part_ret" == "err_success" ]; then
+		err_exit "Cannot mount esd\n"
+	fi
+fi
+
+detect_osx_version
+
+echo "isAppStore = $isAppStore "
+if [ $isAppStore == 1 ]; then
+	outfile=""$filepath"/BaseSystem.img"
+	if [ ! -e "$outfile" ]; then
+		echo "Converting BaseSystem.dmg..."
+		$dmg2img "/mnt/osx/esd/BaseSystem.dmg" "$outfile"
+		if [ ! $? == 0 ] || [ ! -f "$outfile" ]; then
+			err_exit "Img conversion failed\n"
+		fi
+	fi
+
+	echo "Mapping BaseSystem with qemu..."
+	if [ ! $nbd2_mapped == 1 ]; then
+		qemu_map "nbd2" "$outfile"
+		if [ ! $nbd2_mapped == 1 ]; then
+			err_exit "Error during BaseSystem mapping\n"
+		fi
+	fi
+
+	mount_part "/dev/nbd2p2" "base"
+	if [ ! "$mount_part_ret" == "err_success" ]; then
+		err_exit "Cannot mount BaseSystem\n"
+	fi
+	detect_osx_version
+fi
+
+do_system
+if [ ! "$patchmbr" == "false" ]; then
+	docheck_mbr
+fi
+sync
+
+do_finalize
+
+sync
+cleanup
+$lgreen; echo "All Done!"; $normal
+if [ $virtualdev == 1 ] && [ "$dextension" == ".img" ] || [ "$dextension" == ".hdd" ]; then
+	read -p "Do you want to convert virtual image to a VDI file? (y/n)" -n1 -r
+	echo
+	if [[ $REPLY =~ ^[Yy]$ ]];then
+		vboxmanage convertdd  "$dev" ""$devpath/$dfilename".vdi"
+		if [ ! $? == 0 ] || [ ! -f ""$devpath/$dfilename".vdi" ]; then
+			err_exit "Conversion Failed\n"
+		else
+			chmod 666 "$devpath/$dfilename".vdi
+			chown "$SUDO_USER":"$SUDO_USER" "$devpath/$dfilename".vdi
+			read -p "Do you want to delete the img file? (y/n)" -n1 -r
+			echo
+			if [[ $REPLY =~ ^[Yy]$ ]];then
+				rm "$dev"
+			fi
+		fi
+	fi
+fi
+err_exit ""
+
+}
+
+function do_finalize(){
+	do_kexts
+	do_remcache
+	do_kextperms
+	docheck_chameleon
+	docheck_smbios
+	docheck_dsdt
+}
+
+function do_preptarget(){
 if [ $virtualdev == 1 ] && [ $vbhdd == 0 ]; then
 	$yellow; echo "Creating Image..."; $normal
 	if [ -f "$dev" ]; then
@@ -666,6 +791,11 @@ else
 	err_exit "Unknown Operation Mode\n"
 fi
 
+if [ $virtualdev == 1 ]; then
+	chmod 666 "$dev"
+	chown "$SUDO_USER":"$SUDO_USER" "$dev"
+fi
+
 if [ $vbhdd == 1 ]; then
 	echo "Mapping virtual dev with qemu..."
 	qemu-nbd -d /dev/nbd0 &>/dev/null
@@ -718,72 +848,10 @@ $lyellow; echo "Formatting partition as HFS+"; $normal
 if [ $virtualdev == 1 ]; then
 	mkfs.hfsplus /dev/nbd0p1 -v "smx_installer"
 else
-	mkfs.hfsplus ""$dev"1"
+	mkfs.hfsplus ""$dev"1" -v "smx_installer"
 fi
 if [ ! $? == 0 ]; then
 	err_exit "Error during HFS+ formatting\n"
-fi
-
-outfile=""$filepath/$filename".img"
-if [ ! -e "$outfile" ]; then
-	echo "Converting "$file" to img..."
-	$dmg2img "$file" "$outfile"
-#check_err=$(cat /tmp/dmg2img.log | grep -q "ERROR:"; echo $?)
-#if [ ! $? == 0 ] || [ ! -f "$outfile" ] || [ $check_err == 0 ]; then
-if [ ! $? == 0 ] || [ ! -f "$outfile" ]; then
-	rm "$outfile"
-	err_exit "Img conversion failed\n"
-fi
-unset check_err
-fi
-
-$lyellow; echo "Mapping image with qemu..."; $normal
-if [ ! $nbd1_mapped == 1 ]; then
-	qemu_map "nbd1" "$outfile"
-	if [ ! $nbd1_mapped == 1 ]; then
-		err_exit "Error during image mapping\n"
-	fi
-fi
-
-$yellow; echo "Mounting Partitions..."; $normal
-if [ $virtualdev == 0 ]; then 
-	umount ""$dev"1"
-fi
-
-mount_part "/dev/nbd1p2" "esd"
-if [ ! "$mount_part_ret" == "err_success" ]; then
-	mount_part "/dev/nbd1p3" "esd"
-	if [ ! "$mount_part_ret" == "err_success" ]; then
-		err_exit "Cannot mount esd\n"
-	fi
-fi
-
-detect_osx_version
-
-echo "isAppStore = $isAppStore "
-if [ $isAppStore == 1 ]; then
-	outfile=""$filepath"/BaseSystem.img"
-	if [ ! -e "$outfile" ]; then
-		echo "Converting BaseSystem.dmg..."
-		$dmg2img "/mnt/osx/esd/BaseSystem.dmg" "$outfile"
-		if [ ! $? == 0 ] || [ ! -f "$outfile" ]; then
-			err_exit "Img conversion failed\n"
-		fi
-	fi
-
-	echo "Mapping BaseSystem with qemu..."
-	if [ ! $nbd2_mapped == 1 ]; then
-		qemu_map "nbd2" "$outfile"
-		if [ ! $nbd2_mapped == 1 ]; then
-			err_exit "Error during BaseSystem mapping\n"
-		fi
-	fi
-
-	mount_part "/dev/nbd2p2" "base"
-	if [ ! "$mount_part_ret" == "err_success" ]; then
-		err_exit "Cannot mount BaseSystem\n"
-	fi
-	detect_osx_version
 fi
 
 if [ $virtualdev == 1 ]; then
@@ -794,66 +862,10 @@ fi
 if [ ! "$mount_part_ret" == "err_success" ]; then
 	err_exit "Cannot mount target\n"
 fi
+
 if [ ! -d /mnt/osx/target/Extra ]; then
 	mkdir -p /mnt/osx/target/Extra/Extensions
 fi
-
-do_system
-if [ ! "$patchmbr" == "false" ]; then
-	docheck_mbr
-fi
-sync
-
-#if [ ! $(ls -1 "$kextdir/*.kext" | wc -l) == 0 ]; then
-	$ylellow; echo "Installing kexts in \"extra_kexts\" directory"; $normal
-	kextdir="$scriptdir/extra_kexts"
-	if [ ! "$(ls -1 extra_kexts | wc -l)" == "0" ]; then
-		for kext in $kextdir/*.kext; do
-			echo " Installing $(basename $kext)..."
-			#cp -Rv "$kext" /mnt/osx/target/System/Library/Extensions/
-			#chmod -R 755 "/mnt/osx/target/System/Library/Extensions/$(basename $kext)"
-			cp -R"$verbose" "$kext" /mnt/osx/target/Extra/Extensions/
-			chown -R 0:0 "/mnt/osx/target/Extra/Extensions/$(basename $kext)"
-			chmod -R 755 "/mnt/osx/target/Extra/Extensions/$(basename $kext)"
-		done
-	else
-		echo "No kext to install"
-	fi
-	sync
-#fi
-
-do_remcache
-do_kextperms
-docheck_chameleon
-docheck_smbios
-docheck_dsdt
-
-if [ $virtualdev == 1 ]; then
-	chmod 666 "$dev"
-	chown "$SUDO_USER":"$SUDO_USER" "$dev"
-fi
-sync
-cleanup
-echo "All Done!"
-if [ $virtualdev == 1 ] && [ "$dextension" == ".img" ] || [ "$dextension" == ".hdd" ]; then
-	read -p "Do you want to convert virtual image to a VDI file? (y/n)" -n1 -r
-	echo
-	if [[ $REPLY =~ ^[Yy]$ ]];then
-		vboxmanage convertdd  "$dev" ""$devpath/$dfilename".vdi"
-		if [ ! $? == 0 ] || [ ! -f ""$devpath/$dfilename".vdi" ]; then
-			err_exit "Conversion Failed\n"
-		else
-			chmod 666 "$devpath/$dfilename".vdi
-			chown "$SUDO_USER":"$SUDO_USER" "$devpath/$dfilename".vdi
-			read -p "Do you want to delete the img file? (y/n)" -n1 -r
-			echo
-			if [[ $REPLY =~ ^[Yy]$ ]];then
-				rm "$dev"
-			fi
-		fi
-	fi
-fi
-exit 0
 
 }
 
@@ -983,6 +995,23 @@ function qemu_map(){
 	fi
 }
 
+function do_kexts(){
+kexts=$(find "$kextdir" -maxdepth 1 -type d -name "*.kext" | wc -l)
+if [ $kexts == 0 ]; then
+	$lred; echo "No kext to install"; $normal
+else
+	$ylellow; echo "Installing kexts in \"extra_kexts\" directory"; $normal
+	kextdir="$scriptdir/extra_kexts"
+	for kext in $kextdir/*.kext; do
+	echo " Installing $(basename $kext)..."
+	cp -R"$verbose" "$kext" /mnt/osx/target/Extra/Extensions/
+	chown -R 0:0 "/mnt/osx/target/Extra/Extensions/$(basename $kext)"
+	chmod -R 755 "/mnt/osx/target/Extra/Extensions/$(basename $kext)"
+	done
+	sync
+fi
+}
+
 function docheck_smbios(){
 if [ -f "$scriptdir/smbios.plist" ]; then
 	cp $verbose2 "$scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
@@ -1059,11 +1088,21 @@ fi
 
 function do_kextperms(){
 $lyellow; echo "Repairing Kext Permissions..."; $normal
-find /mnt/osx/target/System/Library/Extensions/ -type d -name "*.kext" | while read kext; do
-	#echo "Fixing ... $kext"
-	chmod -R 755 "$kext"
-	chown -R 0:0 "$kext"
-done
+if [ -d /mnt/osx/target/System/Library/Extensions/ ]; then
+	$yellow; echo "/System/Library/Extensions..."; $normal
+	find /mnt/osx/target/System/Library/Extensions/ -type d -name "*.kext" | while read kext; do
+		#echo "Fixing ... $kext"
+		chmod -R 755 "$kext"
+		chown -R 0:0 "$kext"
+	done
+fi
+if [ -d /mnt/osx/target/Extra/Extensions/ ]; then
+	$yellow; echo "/Extra/Extensions..."; $normal
+	find /mnt/osx/target/Extra/Extensions/ -type d -name "*.kext" | while read kext; do
+		chmod -R 755 "$kext"
+		chown -R 0:0 "$kext"
+	done
+fi
 $lgreen; echo "Done"; $normal
 }
 
@@ -1218,17 +1257,16 @@ function check_space {
 function check_commands {
 	$lyellow; echo "Checking Commands..."
 	$normal
-	if [ $commands_checked == 1 ]; then
+	#if [ $commands_checked == 1 ]; then
 		#add checks for other commands after the initial check
-		echo &>/dev/null
-	else
+	#	echo &>/dev/null
+	#else
 		commands=('udisks' 'grep' 'tput' 'dd' 'sed' 'parted' 'awk' 'mkfs.hfsplus' 'wget' 'dirname' 'basename' 'parted' 'pidof' 'gunzip' 'bunzip2' 'cpio')
-	fi
+	#fi
 	for command in "${commands[@]}"; do
 		if ! check_command $command == 0; then
 			$normal
-			cleanup
-			exit
+			err_exit ""
 		fi
 		$normal
 	done
@@ -1314,7 +1352,11 @@ function err_wexit() {
 function err_exit() {
 	$lred; printf "$1"; $normal
 	cleanup
-	exit 1
+	if [ "$1" == "" ]; then
+		exit 0
+	else
+		exit 1
+	fi
 }
 
 function cleanup(){
@@ -1588,6 +1630,7 @@ printf "$0 [dmgfile] [vdi/vmdk/vhd]\tConverts and install and create a virtual h
 printf "$0 [img file/vdi/vmdk/vhd]\tOpen the setup management/tweak menu\n"
 printf "$0 [pkg/mpkg] [destdir]\t\tExtract a package to destdir\n"
 printf "$0 [dev]\t\t\t\tShow Management Menu for setup media\n"
+printf "$0 --mkchameleon [dev]\t\tMakes chameleon rescue USB\n"
 printf "Management menu:\n"
 printf "\t-Install/Remove extra kexts\n"
 printf "\t-Install/Remove chameleon Modules\n"
@@ -1596,7 +1639,7 @@ printf "\t-Install/Reinstall chameleon\n"
 printf "\t-Install/Reinstall mbr patch\n"
 printf "\t-Install/Reinstall custom smbios\n"
 printf "\t-Install/Reinstall custom DSDT\n"
-#printf "\t-Apply tweaks/workarounds\n"
+printf "\t-Apply tweaks/workarounds\n"
 printf "\t-Erase the whole setup partition\n"
 }
 main "$@"
