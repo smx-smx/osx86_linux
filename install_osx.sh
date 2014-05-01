@@ -133,7 +133,7 @@ case "$choice" in
 		docheck_smbios
 		pause; clear
 		mediamenu
-	;;
+		;;
 	8)
 		cleanup "ret"
 		if [ $virtualdev == 1 ]; then
@@ -1161,16 +1161,18 @@ function do_chameleon(){
 
 function do_system(){
 	$lyellow; echo "Copying Base System to "$dev"..."; $normal
-	#rsync -arpv --progress /mnt/osx/base/* /mnt/osx/target/
 	if [[ "$osver" =~ "10.6" ]]; then
-		cp -pdR"$verbose" /mnt/osx/esd/* /mnt/osx/target/
+		#cp -pdR"$verbose" /mnt/osx/esd/* /mnt/osx/target/
+		rsync -arp"$verbose" --progress /mnt/osx/esd/* /mnt/osx/target/
 	else
-		cp -pdR"$verbose" /mnt/osx/base/* /mnt/osx/target/
+		#cp -pdR"$verbose" /mnt/osx/base/* /mnt/osx/target/
+		rsync -arp"$verbose" --progress /mnt/osx/base/* /mnt/osx/target/
 		
 		$lyellow; echo "Copying installation packages to "$dev"..." ; $normal
 		rm $verbose2 /mnt/osx/target/System/Installation/Packages
 		mkdir $verbose2 /mnt/osx/target/System/Installation/Packages
-		cp -pdR"$verbose" /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
+		#cp -pdR"$verbose" /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
+		rsync -arp"$verbose" /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
 		sync
 		$yellow; echo "Copying kernel..."; $normal
 		if [[ "$osver" =~ "10.9" ]]; then
@@ -1186,7 +1188,6 @@ function do_system(){
 		fi
 	fi
 	sync
-	#rsync -arpv --progress /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages 
 }
 
 function detect_osx_version(){
