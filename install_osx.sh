@@ -17,7 +17,12 @@ export lpurple='printf \033[01;35m'
 export lcyan='printf \033[01;36m'
 export white='printf \033[01;37m'
 
-program_revision=23
+rev=$(git log --pretty=oneline 2>/dev/null | wc -l)
+if [ $rev -gt 0 ]; then
+	program_revision="git r$rev"
+else
+	program_revision="git"
+fi
 configfile="config.cfg"
 
 if [ -z $really_verbose ]; then really_verbose=0; fi
@@ -385,10 +390,14 @@ echo "Virtual HDD Image Mode"
 	mounttype=$(mount | grep "$mountdev" | awk '{print $5}') #mount method reported my "mount"
 	checkro=$(udisks --show-info "$mountdev" | grep "is read only" | awk '{print $4}')
 	if [ ! -b "$mountdev" ]; then
-		err_exit "Can't get virtual image device\n"
+		if ! mount | grep -q "$mountdev"; then
+			err_exit "Can't get virtual image device\n"
+		fi
 	fi	
 	if [ ! "$checkro" == "0" ] && [ ! "$checkro" == "1" ]; then
-		err_exit "Can't get readonly flag\n"
+		if ! mount | grep "$mountdev" | grep -qi "rw"; then
+			err_exit "Can't get readonly flag\n"
+		fi
 	fi
 	if [ $checkro == 1 ]; then
 		err_exit "Can't write image on read only filesystem\n"
@@ -445,7 +454,7 @@ $lblue; printf "M"
 $lpurple; printf "X\n"
 $normal
 
-echo "Version: r$program_revision"
+echo "Version: $program_revision"
 
 export -f payload_extractor
 export -f do_remcache
