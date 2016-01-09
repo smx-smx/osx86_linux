@@ -519,7 +519,6 @@ function do_preptarget(){
 	if [ $vbhdd -eq 1 ]; then
 		echo "Mapping virtual dev with qemu..."
 		qemu-nbd -d /dev/nbd0 &>/dev/null
-		sleep 1
 		if ! qemu-nbd -c /dev/nbd0 "$dev"; then
 			err_exit "Error during nbd mapping\n"
 		fi
@@ -609,7 +608,10 @@ function do_init_qemu(){
 	nbd_reloaded=0
 	if [ ! -b /dev/nbd0 ]; then
 		modprobe nbd max_part=10
-		sleep 1
+		$lyellow; echo "Waiting for nbd to be fully loaded"; $normal
+		while [ ! -b /dev/nbd0 ]; do
+			: #nop
+		done
 		if [ ! -b /dev/nbd0 ]; then
 			err_exit "Error while loading module \"nbd\"\n"
 		fi
@@ -676,11 +678,12 @@ function qemu_map(){
 	local nbdev=$1
 	local image=$2
 	qemu-nbd -d /dev/${nbdev} &>/dev/null
-	sleep 0.1
+	sync
 	qemu-nbd -f raw -c /dev/${nbdev} "${image}"
 	local result=$?
 	if [ $result -eq 0 ]; then
 		eval "${nbdev}_mappedeval=1"
+		partprobe /dev/${nbdev}
 	fi
 	return $result
 }
@@ -832,19 +835,15 @@ function do_chameleon(){
 	if [ $virtualdev == 1 ]; then
 		if [ $do_instMBR == 1 ]; then
 			dd bs=446 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="/dev/nbd0"
-			sleep 0.5
 			sync
 		fi
-		sleep 0.5
 		dd if="$scriptdir/chameleon/boot1h" of="/dev/nbd0p1"
-		sleep 0.5
 		sync
-		sleep 0.5
 	else
 		if [ $do_instMBR == 1 ]; then
 			dd bs=446 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="$dev"
 		fi
-		dd if="$scriptdir/chameleon/boot1h" of=""$dev"1"
+		dd if="$scriptdir/chameleon/boot1h" of="${dev}1"
 	fi
 	sync
 }
@@ -881,32 +880,29 @@ function do_system(){
 }
 
 function detect_osx_version(){
-	isAppStore=0
 	local verfile
-	if [ "$mediamenu" == "1" ]; then #look in target
+	local mountpoint
+
+	if [ $mediamenu -eq 1 ]; then #look in target
+		mountpoint="target"
 		$lyellow; echo "Scanning OSX version on $dev...";$normal
-		verfile="/mnt/osx/target/System/Library/CoreServices/SystemVersion.plist" #target
+	elif [ -f "/mnt/osx/esd/BaseSystem.dmg" ]; then
+		mountpoint="base"
+		$lyellow; echo "Scanning OSX version on BaseSystem..."; $normal
 	else #look in installer
+		mountpoint="esd"
 		$lyellow; echo "Scanning OSX version on DMG..."; $normal
-		verfile="/mnt/osx/esd/System/Library/CoreServices/SystemVersion.plist" #assume dvd format
 	fi
-	if [ ! -f "$verfile" ]; then #no dvd format
-		verfile="/mnt/osx/base/System/Library/CoreServices/SystemVersion.plist" #assume appstore format
-		if [ -f "/mnt/osx/esd/BaseSystem.dmg" ]; then #found appstore format
-			osname="AppStore"
-			osver="10.7+"
-			isAppStore=1
-		elif [ -f "$verfile" ] && [ ! "$mediamenu" == "1" ]; then
-			$lyellow; echo "Scanning OSX version on BaseSystem"; $normal
-		else
-			err_exit "Can't detect OSX Version\n"
-		fi
+	verfile="/mnt/osx/${mountpoint}/System/Library/CoreServices/SystemVersion.plist" #target
+
+	if [ ! -f "$verfile" ]; then
+		err_exit "Cannot detect OSX Version: ${verfile} is missing!\n"
 	fi
 
-	local tq=0  #to quit
+	local fatal=0
 	if [ -f "$verfile" ]; then
-		osbuild=$(cat "$verfile" | grep -A1 "<key>ProductBuildVersion</key>" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
-		osver=$(cat "$verfile" | grep -A1 "<key>ProductVersion</key>" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
+		osbuild=$(grep -A1 "<key>ProductBuildVersion</key>" "$verfile" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
+		osver=$(cat "$verfile" | grep -A1 "<key>ProductVersion</key>" "$verfile" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
 		if [[ "$osver" =~ "10.6" ]]; then
 			osname="Snow Leopard"
 		elif [[ "$osver" =~ "10.7" ]]; then
@@ -918,15 +914,15 @@ function detect_osx_version(){
 		elif [ ! "$osver" == "" ] && [ ! "$osbuild" == "" ]; then
 			osname="Unsupported"
 			osver="version ($osver)"
-			local tq=1
+			fatal=1
 		else
 			osname="Unknown"
 			osver="version"
-			local tq=1
+			fatal=1
 		fi
 	fi
 
-	if [ $tq == 1 ]; then
+	if [ $fatal -eq 1 ]; then
 		err_exit "$osname $osver detected\n"
 	else
 		$lgreen; echo "$osname $osver detected"; $normal
@@ -1574,11 +1570,8 @@ function main(){
 			err_exit "Cannot mount esd\n"
 	fi
 
-	detect_osx_version
-
-	echo "isAppStore = $isAppStore"
-	if [ $isAppStore == 1 ]; then
-		outfile=""$filepath"/BaseSystem.img"
+	if [ -f "/mnt/osx/esd/BaseSystem.dmg" ]; then
+		outfile="${filepath}/BaseSystem.img"
 		if [ ! -e "$outfile" ]; then
 			echo "Converting BaseSystem.dmg..."
 			$dmg2img "/mnt/osx/esd/BaseSystem.dmg" "$outfile"
@@ -1597,8 +1590,8 @@ function main(){
 		if ! mount_part "/dev/nbd2p2" "base"; then
 			err_exit "Cannot mount BaseSystem\n"
 		fi
-		detect_osx_version
 	fi
+	detect_osx_version
 
 	do_system
 	if [ ! "$patchmbr" == "false" ]; then
