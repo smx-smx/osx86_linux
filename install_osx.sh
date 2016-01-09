@@ -54,7 +54,7 @@ function pause() {
 function mediamenu(){
 	mediamenu=1
 	if [ $virtualdev == 1 ]; then
-		if [ $nbd0_mapped == 0 ]; then
+		if [ $nbd0_mapped -eq 0 ]; then
 			$white; echo "Mapping $dev..."; $normal
 			if ! qemu_map "nbd0" "$dev"; then
 				err_exit "Can't map "$dev"\n"
@@ -65,26 +65,27 @@ function mediamenu(){
 		fi
 	fi
 
-	$yellow; echo "Mounting..."; $normal
-	if [ $virtualdev -eq 1 ]; then
-		mount_part "/dev/nbd0p1" "target"
-	else
-		$yellow; echo "Trying $dev..."; $normal
-		if ! mount_part "$dev" "target" "silent"; then
-			$yellow; echo "Trying ${dev}1..."; $normal
-			mount_part "${dev}1" "target"
+	if ! grep -q "/mnt/osx/target" /proc/mounts; then
+		$yellow; echo "Mounting..."; $normal
+		if [ $virtualdev -eq 1 ]; then
+			mount_part "/dev/nbd0p1" "target"
+		else
+			$yellow; echo "Trying $dev..."; $normal
+			if ! mount_part "$dev" "target" "silent"; then
+				$yellow; echo "Trying ${dev}1..."; $normal
+				mount_part "${dev}1" "target"
+			fi
 		fi
+		if [ ! $? -eq 0 ]; then
+			err_exit "Cannot mount target\n"
+		else
+			$lgreen; echo "Target Mounted"; $normal
+		fi
+		if [ ! -d /mnt/osx/target/Extra ]; then
+			mkdir -p /mnt/osx/target/Extra/Extensions
+		fi
+		detect_osx_version
 	fi
-	if [ ! $? -eq 0 ]; then
-		err_exit "Cannot mount target\n"
-	else
-		$lgreen; echo "Target Mounted"; $normal
-	fi
-	if [ ! -d /mnt/osx/target/Extra ]; then
-		mkdir -p /mnt/osx/target/Extra/Extensions
-	fi
-
-	detect_osx_version
 	echo "Working on "$dev""
 	echo "Choose an operation..."
 	echo "1  - Manage kexts"
@@ -594,9 +595,7 @@ function qemu_umount_all(){
 function qemu_unmap_all(){
 	for device in /dev/nbd*; do
 		if [ -b "${device}" ]; then
-			if ! qemu-nbd -d "${device}" &>/dev/null; then
-				err_exit "Error during nbd unmapping\n"
-			fi
+			qemu-nbd -d "${device}" &>/dev/null
 		fi
 	done
 }
@@ -680,7 +679,7 @@ function qemu_map(){
 	qemu-nbd -f raw -c /dev/${nbdev} "${image}"
 	local result=$?
 	if [ $result -eq 0 ]; then
-		eval "${nbdev}_mappedeval=1"
+		eval "${nbdev}_mapped=1"
 		partprobe /dev/${nbdev}
 	fi
 	return $result
