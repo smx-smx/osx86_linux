@@ -908,6 +908,10 @@ function detect_osx_version(){
 			osname="Mountain Lion"
 		elif [[ "$osver" =~ "10.9" ]]; then
 			osname="Mavericks"
+		elif [[ "$osver" =~ "10.10" ]]; then
+			osname="Yosemite"
+		elif [[ "$osver" =~ "10.11" ]]; then
+			osname="El Capitan"
 		elif [ ! "$osver" == "" ] && [ ! "$osbuild" == "" ]; then
 			osname="Unsupported"
 			osver="version ($osver)"
