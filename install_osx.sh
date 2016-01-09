@@ -30,7 +30,7 @@ if [ -z $really_verbose ]; then
 fi
 
 if [ $really_verbose == 1 ]; then
-	verbose="v"
+	verbose="-v"
 else
 	verbose=""
 fi
@@ -66,7 +66,7 @@ function mediamenu(){
 	fi
 
 	$yellow; echo "Mounting..."; $normal
-	if [ $virtualdev == 1 ]; then
+	if [ $virtualdev -eq 1 ]; then
 		mount_part "/dev/nbd0p1" "target"
 	else
 		$yellow; echo "Trying $dev..."; $normal
@@ -354,16 +354,16 @@ function kernelmenu(){
 					$yellow; echo "Backing up mach_kernel..."; $normal
 					mv /mnt/osx/target/mach_kernel /mnt/osx/target/apple_kernel
 					$yellow; echo "Copying new mach_kernel..."; $normal
-					cp -$verbose "$kerndir/${!name}" /mnt/osx/target/
+					cp $verbose "$kerndir/${!name}" /mnt/osx/target/
 					chmod 755 "/mnt/osx/target/${!name}"
 				fi
 			else #alternative kernel name, we can delete
 				$yellow; echo "Removing ${!name}..."; $normal
-				rm -"$verbosse" "/mnt/osx/target/${!name}"
+				rm $verbosse "/mnt/osx/target/${!name}"
 			fi
 		else
 			$yellow; echo "Installing ${!name}..."; $normal
-			cp -$verbose "$kerndir/${!name}" /mnt/osx/target/
+			cp $verbose "$kerndir/${!name}" /mnt/osx/target/
 			chmod 755 "/mnt/osx/target/${!name}"
 		fi
 	fi
@@ -597,9 +597,11 @@ function qemu_umount_all(){
 }
 
 function qemu_unmap_all(){
-	for device in /dev/nbd?; do
-		if ! qemu-nbd -d "${device}" &>/dev/null; then
-			err_exit "Error during nbd unmapping\n"
+	for device in /dev/nbd*; do
+		if [ -b "${device}" ]; then
+			if ! qemu-nbd -d "${device}" &>/dev/null; then
+				err_exit "Error during nbd unmapping\n"
+			fi
 		fi
 	done
 }
@@ -649,6 +651,10 @@ function mount_part(){
 	local type=$2
 	local flags=$3
 
+	if grep -q "$src" /proc/mounts; then
+		return 0
+	fi
+
 	domount_part "$src" "$type" "$flags"
 	local result=$?
 
@@ -694,7 +700,7 @@ function do_kexts(){
 		kextdir="$scriptdir/extra_kexts"
 		for kext in $kextdir/*.kext; do
 		echo " Installing $(basename $kext)..."
-		cp -R"$verbose" "$kext" /mnt/osx/target/Extra/Extensions/
+		cp -R $verbose "$kext" /mnt/osx/target/Extra/Extensions/
 		chown -R 0:0 "/mnt/osx/target/Extra/Extensions/$(basename $kext)"
 		chmod -R 755 "/mnt/osx/target/Extra/Extensions/$(basename $kext)"
 		done
@@ -704,7 +710,7 @@ function do_kexts(){
 
 function docheck_smbios(){
 	if [ -f "$scriptdir/smbios.plist" ]; then
-		cp -$verbose "$scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
+		cp $verbose "$scriptdir/smbios.plist" /mnt/osx/target/Extra/smbios.plist
 	else
 		$lyellow; echo "Skipping smbios.plist, file not found"; $normal
 		if [[ ! "$osver" =~ "10.6" ]]; then
@@ -715,7 +721,7 @@ function docheck_smbios(){
 
 function docheck_dsdt(){
 	if [ -f "$scriptdir/DSDT.aml" ]; then
-		cp -$verbose "$scriptdir/DSDT.aml" /mnt/osx/target/Extra/DSDT.aml
+		cp $verbose "$scriptdir/DSDT.aml" /mnt/osx/target/Extra/DSDT.aml
 	else
 		$lred; echo "DSDT.aml not found!"; $normal
 		$lyellow; echo "Using system stock DSDT table"; $normal
@@ -798,13 +804,13 @@ function do_kextperms(){
 
 function do_mbr(){
 	$lyellow; echo "Patching Installer to support MBR"; $normal
-	cp -$verbose "$scriptdir/osinstall_mbr/OSInstall.mpkg" "/mnt/osx/target/System/Installation/Packages/OSInstall.mpkg"
-	cp -$verbose "$scriptdir/osinstall_mbr/OSInstall" "/mnt/osx/target/System/Library/PrivateFrameworks/Install.framework/Frameworks/OSInstall.framework/Versions/A/OSInstall"
+	cp $verbose "$scriptdir/osinstall_mbr/OSInstall.mpkg" "/mnt/osx/target/System/Installation/Packages/OSInstall.mpkg"
+	cp $verbose "$scriptdir/osinstall_mbr/OSInstall" "/mnt/osx/target/System/Library/PrivateFrameworks/Install.framework/Frameworks/OSInstall.framework/Versions/A/OSInstall"
 }
 
 function do_chameleon(){
 	$lyellow; echo "Installing chameleon..."; $normal
-	cp -$verbose "$scriptdir/chameleon/boot" /mnt/osx/target/
+	cp $verbose "$scriptdir/chameleon/boot" /mnt/osx/target/
 	sync
 
 	if [ -d "$scriptdir/chameleon/Themes" ]; then
@@ -826,18 +832,18 @@ function do_chameleon(){
 		if [ -z $chameleonmbr ]; then
 			read -p "Do you want to install Chameleon on MBR? (y/n)" -n1 -r
 			echo
-			if [[ $REPLY =~ ^[Yy]$ ]];then do_instMBR=1; fi
+			if [[ $REPLY =~ ^[Yy]$ ]]; then do_instMBR=1; fi
 		elif [ "$chameleonmbr" == "true" ]; then do_instMBR=1; fi
 	fi
-	if [ $virtualdev == 1 ]; then
-		if [ $do_instMBR == 1 ]; then
+	if [ $virtualdev -eq 1 ]; then
+		if [ $do_instMBR -eq 1 ]; then
 			dd bs=446 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="/dev/nbd0"
 			sync
 		fi
 		dd if="$scriptdir/chameleon/boot1h" of="/dev/nbd0p1"
 		sync
 	else
-		if [ $do_instMBR == 1 ]; then
+		if [ $do_instMBR -eq 1 ]; then
 			dd bs=446 count=1 conv=notrunc if="$scriptdir/chameleon/boot0" of="$dev"
 		fi
 		dd if="$scriptdir/chameleon/boot1h" of="${dev}1"
@@ -849,24 +855,24 @@ function do_system(){
 	$lyellow; echo "Copying Base System to "$dev"..."; $normal
 	if [[ "$osver" =~ "10.6" ]]; then
 		#cp -pdR"$verbose" /mnt/osx/esd/* /mnt/osx/target/
-		rsync -arp"$verbose" --progress /mnt/osx/esd/* /mnt/osx/target/
+		rsync -arp $verbose --progress /mnt/osx/esd/* /mnt/osx/target/
 	else
 		#cp -pdR"$verbose" /mnt/osx/base/* /mnt/osx/target/
-		rsync -arp"$verbose" --progress /mnt/osx/base/* /mnt/osx/target/
+		rsync -arp $verbose --progress /mnt/osx/base/* /mnt/osx/target/
 
 		$lyellow; echo "Copying installation packages to "$dev"..." ; $normal
-		rm -$verbose /mnt/osx/target/System/Installation/Packages
-		mkdir -$verbose /mnt/osx/target/System/Installation/Packages
+		rm $verbose /mnt/osx/target/System/Installation/Packages
+		mkdir $verbose /mnt/osx/target/System/Installation/Packages
 		#cp -pdR"$verbose" /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
-		rsync -arp"$verbose" /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
+		rsync -arp $verbose /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
 		sync
 		$yellow; echo "Copying kernel..."; $normal
 		if [[ "$osver" =~ "10.9" ]]; then
 			$lyellow; echo "Kernel is in BaseSystemBinaries.pkg, extracting..."; $normal
 			extract_pkg "/mnt/osx/esd/Packages/BaseSystemBinaries.pkg" "$scriptdir/tmp/bsb" "skip"
-			cp -a"$verbose" "$scriptdir/tmp/bsb/mach_kernel" "/mnt/osx/target/"
-		else
-			if [ -f "/mnt/osx/esd/mach_kernel" ]; then cp -av /mnt/osx/esd/mach_kernel /mnt/osx/target/; fi
+			cp -a $verbose "$scriptdir/tmp/bsb/mach_kernel" "/mnt/osx/target/"
+		elif [ -f "/mnt/osx/esd/mach_kernel" ]; then
+			cp -av /mnt/osx/esd/mach_kernel /mnt/osx/target/
 		fi
 		if [ ! -f /mnt/osx/target/mach_kernel ]; then
 			$lred; echo "WARNING! Kernel Copy Error!!"
@@ -899,7 +905,7 @@ function detect_osx_version(){
 	local fatal=0
 	if [ -f "$verfile" ]; then
 		osbuild=$(grep -A1 "<key>ProductBuildVersion</key>" "$verfile" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
-		osver=$(cat "$verfile" | grep -A1 "<key>ProductVersion</key>" "$verfile" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
+		osver=$(grep -A1 "<key>ProductVersion</key>" "$verfile" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
 		if [[ "$osver" =~ "10.6" ]]; then
 			osname="Snow Leopard"
 		elif [[ "$osver" =~ "10.7" ]]; then
@@ -912,7 +918,7 @@ function detect_osx_version(){
 			osname="Yosemite"
 		elif [[ "$osver" =~ "10.11" ]]; then
 			osname="El Capitan"
-		elif [ ! "$osver" == "" ] && [ ! "$osbuild" == "" ]; then
+		elif [ ! -z "$osver" ] && [ ! -z "$osbuild" ]; then
 			osname="Unsupported"
 			osver="version ($osver)"
 			fatal=1
