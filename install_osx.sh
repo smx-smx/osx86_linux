@@ -181,38 +181,33 @@ function mediamenu(){
 }
 
 function tweakmenu(){
-	tweaks=$(find "$scriptdir/tweaks" -maxdepth 1 -type f -name "*.sh" | wc -l)
-	if [ $tweaks == 0 ]; then
+	local tweaks=($(find "$scriptdir/tweaks" -maxdepth 1 -type f -name "*.sh"))
+	if [ ${#tweaks[@]} -eq 0 ]; then
 		$lred; echo "No tweak to install"; $normal
 		pause "Press [enter] to return to menu"
 		mediamenu
 	fi
 	printf "Choose a tweak to apply: "
-	local t
-	local estdir=$(echo "$scriptdir/tweaks" | sed 's/\ /\\\//g;s/\//\\\//g')
 	$white; echo "0 - Return to main menu"; $normal
-	for t in `seq $tweaks`; do
-		local option=$(find "$scriptdir/tweaks" -maxdepth 1 -type f -not -name ".gitignore" -name "*.sh" | sed "s/$estdir\///g" | sed -n "$t"p)
-		local tname=$(grep tweakname= $scriptdir/tweaks/$option | grep -o "=.*" | sed 's|[="]||g')
-			eval tweak$t="$option"
-			printf "$t - $tname\n"
+
+	for i in ${!tweaks[@]}; do
+		local name=$(grep tweakname= ${tweaks[$i]} | grep -o "=.*" | sed 's|[="]||g')
+		echo $((i + 1)) - ${name}
 	done
 	$white; echo "Choose a tweak to apply"; $normal
-		read choice
-	local name="tweak$choice"
-	if [ "$choice" == "0" ]; then
-		clear
-		mediamenu
-	fi
-	if [ -z "${!name}" ]; then
+	read choice
+	if [ -z $choice ] || [ $choice -lt 0 ] || [ $choice -gt ${#tweaks[@]} ]; then
 		pause "Invalid option, press [enter] to try again"
 		clear
 		tweakmenu
+	elif [ $choice -eq 0 ]; then
+		clear
+		mediamenu
 	else
-	clear
-		$yellow; echo "Applying ${!name}..."; $normal
-		chmod +x "$scriptdir/tweaks/${!name}"
-		bash "$scriptdir/tweaks/${!name}"
+		clear
+		local tweak=${tweaks[$((choice-1))]}
+		$yellow; echo "Applying ${tweak}..."; $normal
+		bash "${tweak}"
 	fi
 	$lgreen; echo "Done!"; $normal
 	tweakmenu
