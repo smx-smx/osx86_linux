@@ -359,7 +359,7 @@ function kernelmenu(){
 				fi
 			else #alternative kernel name, we can delete
 				$yellow; echo "Removing ${!name}..."; $normal
-				rm $verbosse "/mnt/osx/target/${!name}"
+				rm $verbose "/mnt/osx/target/${!name}"
 			fi
 		else
 			$yellow; echo "Installing ${!name}..."; $normal
