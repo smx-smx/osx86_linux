@@ -25,7 +25,9 @@ else
 fi
 configfile="config.cfg"
 
-if [ -z $really_verbose ]; then really_verbose=0; fi
+if [ -z $really_verbose ]; then
+	really_verbose=0
+fi
 
 if [ $really_verbose == 1 ]; then
 	verbose="v"
@@ -54,8 +56,7 @@ function mediamenu(){
 	if [ $virtualdev == 1 ]; then
 		if [ $nbd0_mapped == 0 ]; then
 			$white; echo "Mapping $dev..."; $normal
-			qemu_map "nbd0" "$dev"
-			if [ ! $nbd0_mapped == 1 ]; then
+			if ! qemu_map "nbd0" "$dev"; then
 				err_exit "Can't map "$dev"\n"
 			fi
 		fi
@@ -69,13 +70,12 @@ function mediamenu(){
 		mount_part "/dev/nbd0p1" "target"
 	else
 		$yellow; echo "Trying $dev..."; $normal
-		mount_part "$dev" "target" "silent"
-		if [ ! "$mount_part_ret" == "err_success" ]; then
-			$yellow; echo "Try "$dev"1..."; $normal
-			mount_part ""$dev"1" "target"
+		if ! mount_part "$dev" "target" "silent"; then
+			$yellow; echo "Trying ${dev}1..."; $normal
+			mount_part "${dev}1" "target"
 		fi
 	fi
-	if [ ! "$mount_part_ret" == "err_success" ]; then
+	if [ ! $? -eq 0 ]; then
 		err_exit "Cannot mount target\n"
 	else
 		$lgreen; echo "Target Mounted"; $normal
@@ -369,40 +369,48 @@ function kernelmenu(){
 	kernelmenu
 }
 
+function isRO(){
+	local mountdev="$1"
+	local dev_major=$(stat -c "%t" "${mountdev}")
+	local dev_minor=$(stat -c "%T" "${mountdev}")
+	if [ ! -f "/sys/dev/block/${dev_major}:${dev_minor}/ro" ]; then
+		err_exit "Can't get readonly flag\n"
+	fi
+	local isRO=$(cat /sys/dev/block/${dev_major}:${dev_minor}/ro)
+	if [ ${isRO} -eq 1 ]; then
+		err_exit "${mountdev} is mounted in R/O mode!\n"
+	fi
+	return ${isRO}
+}
 
 function vdev_check(){
 	echo "Virtual HDD Image Mode"
 	virtualdev=1
-	local touchedfile=0
-	local deletedfile=0
 	if ! check_command 'qemu-nbd' == 0; then
 		err_exit ""
 	fi
-	if [ ! -e "$1" ]; then 
-		touchedfile=1
-		touch "$1"
-	fi
 
-	mountdev=$(df -P "$1" | tail -1 | cut -d' ' -f 1) #which partition holds the image
-	mountfs=$(udisks --show-info "$mountdev" | grep "type:" | sed -n 1p | sed 's|[\t, ]||g;s/type\://g') #filesystem type of partition
-	mounttype=$(mount | grep "$mountdev" | awk '{print $5}') #mount method reported my "mount"
-	checkro=$(udisks --show-info "$mountdev" | grep "is read only" | awk '{print $4}')
-	if [ ! -b "$mountdev" ]; then
-		if ! mount | grep -q "$mountdev"; then
-			err_exit "Can't get virtual image device\n"
-		fi
-	fi	
-	if [ ! "$checkro" == "0" ] && [ ! "$checkro" == "1" ]; then
-		if ! mount | grep "$mountdev" | grep -qi "rw"; then
-			err_exit "Can't get readonly flag\n"
-		fi
+ 	# which partition holds the image
+	local file_info
+	if [ -f "$1" ]; then
+		file_info=$(df -TP "$1")
+	else
+		touch "$1"
+		file_info=$(df -TP "$1")
+		rm "$1"
 	fi
-	if [ $checkro == 1 ]; then
-		err_exit "Can't write image on read only filesystem\n"
+	local fstype=$(echo "${file_info}" | awk '/^\/dev/ {print $2}')
+	local mountdev=$(echo "${file_info}" | awk '/^\/dev/ {print $1}')
+	if [ ! -b "${mountdev}" ]; then
+		err_exit "${mountdev} is not a valid block device\n"
 	fi
-	if [ "$mountfs" == "ntfs" ] && [ "$mounttype" == "fuseblk" ]; then
-		$lred; echo "WARNING, FUSE DETECTED!, READ/WRITE OPERATION MAY BE SLOW"
-		echo "ext4 filesystem is preferred"
+	local isRO=$(isRO "${mountdev}"; echo $?)
+	if [ $isRO -eq 1 ]; then
+		err_exit "${mountdev} is mounted in R/O mode!\n"
+	fi
+	if [ "${fstype}" == "ntfs" ] && [ "${fstype}" == "fuseblk" ]; then
+		$lred; echo "WARNING, YOUR DMG IS STORED ON A FUSE FILESYSTEM!, READ/WRITE OPERATIONS MAY BE SLOW"
+		echo "A non-FUSE FS is recommended"
 		read -p "Are you sure you want to continue? (y/n)" -n1 -r
 		echo; $normal
 		if [[ $REPLY =~ ^[Nn]$ ]];then
@@ -429,14 +437,10 @@ function vdev_check(){
 			size=$((10 * 1024 * 1024 * 1024)) #10gb
 		fi
 	fi
-	check_space "$dev" "$size" 1
+	check_space "$mountdev" "$size" 1
 	isdev=$(echo "$1" | grep -q "/dev/"; echo $?)
 	if [ $isdev == 0 ]; then
 		err_exit "Something wrong, not going to erase $dev\n"
-	fi
-	if [ $touchedfile == 1 ] && [ -f "$1" ]; then
-		rm "$1"
-		deletedfile=1
 	fi
 }
 
@@ -450,7 +454,7 @@ function do_finalize(){
 }
 
 function do_preptarget(){
-	if [ $virtualdev == 1 ] && [ $vbhdd == 0 ]; then
+	if [ $virtualdev -eq 1 ] && [ $vbhdd -eq 0 ]; then
 		$yellow; echo "Creating Image..."; $normal
 		if [ -f "$dev" ]; then
 			$lred; read -p "Image $dev already exists. Overwrite? (y/n)" -n1 -r
@@ -460,54 +464,34 @@ function do_preptarget(){
 			fi
 		fi
 		dd if=/dev/zero bs=1 of="$dev" seek="$size" count=0
-		sync; sync; sync; sync
 		if [ ! $? == 0 ]; then
 			err_exit "Error during image creation\n"
 		fi
-	elif [ $virtualdev == 1 ] && [ $vbhdd == 1 ]; then
+	elif [ $virtualdev -eq 1 ] && [ $vbhdd -eq 1 ]; then
 			if ! check_command 'vboxmanage' == 0; then
-				err_exit ""
-			fi
-			$lred; echo "WARNING, VIRTUALBOX OUTPUT EXTENSION DETECTED!"
-			echo "QEMU SUPPORT FOR VIRTUALBOX HARD DISKS  MAY NOT BE FULLY STABLE"
-			echo "img output is recommended. You will be asked if you want to convert the img to vdi at the end of the process"
-			read -p "Are you sure you want to continue with virtualbox format? (y/n)" -n1 -r
-			echo; $normal
-			if [[ $REPLY =~ ^[Nn]$ ]];then
 				err_exit ""
 			fi
 			vboxmanage createhd --filename "$dev" --sizebyte $size --format "$format" --variant Standard
 			if [ ! $? == 0 ]; then
 				err_exit "Error during Virtual Hard Disk Creation\n"
 			fi
-	elif [ $virtualdev == 0 ] && [ $vbhdd == 0 ]; then
+	elif [ $virtualdev -eq 0 ] && [ $vbhdd -eq 0 ]; then
 		if [[ $dev = *[0-9] ]]; then
 			usage
 			err_exit "You must specify the whole device, not a single partition!\n"
 		fi
-		partmap=$(ls -1 "$dev"*[0-9])
-		for part in $partmap; do
+		for part in $dev*[0-9]; do
 			echo "Part: $part"
-			checkmounted=$(mount | grep -q "$part"; echo $?)
-			if [ $checkmounted == 0 ]; then
+			if grep -q "$part" /proc/mounts; then
 				umount "$part"
 			fi
-			checkmounted=$(mount | grep -q "$part"; echo $?)
-			if [ $checkmounted == 0 ]; then
+			if grep -q "$part" /proc/mounts; then
 				err_exit "Couldn't unmount "$part"\n"
 			fi
 		done
-		checkmounted=$(mount | grep -q "$dev"; echo $?)
-		if [ $checkmounted == 0 ]; then
-			err_exit ""$dev" is still mounted\n"
-		fi
-		checkrem=$(udisks --show-info "$dev" | grep "removable" | awk '{print $2}')
-		echo "isRemovable = $checkrem"
-		if [ ! $checkrem == 0 ] && [ ! $checkrem == 1 ]; then
-			err_exit "Can't get removable flag\n"
-		fi
-		
-		if [ "$checkrem" == "0" ]; then
+		isRO=$(isRO "$dev")
+		echo "isRemovable = $isRO"
+		if [ $isRO -eq 0 ]; then
 			$lred; echo "WARNING, "$dev" IS NOT A REMOVABLE DEVICE!"
 			echo "ARE YOU SURE OF WHAT YOU ARE DOING?"
 			read -p "Are you REALLY sure you want to continue? (y/n)" -n1 -r
@@ -527,42 +511,41 @@ function do_preptarget(){
 		err_exit "Unknown Operation Mode\n"
 	fi
 
-	if [ $virtualdev == 1 ]; then
+	if [ $virtualdev -eq 1 ]; then
 		chmod 666 "$dev"
 		chown "$SUDO_USER":"$SUDO_USER" "$dev"
 	fi
 
-	if [ $vbhdd == 1 ]; then
+	if [ $vbhdd -eq 1 ]; then
 		echo "Mapping virtual dev with qemu..."
 		qemu-nbd -d /dev/nbd0 &>/dev/null
 		sleep 1
-		qemu-nbd -c /dev/nbd0 "$dev"
-		if [ ! $? == 0 ]; then
+		if ! qemu-nbd -c /dev/nbd0 "$dev"; then
 			err_exit "Error during nbd mapping\n"
-		fi	
+		fi
 	fi
 
 	echo "Creating Partition Table on $dev..."
-	if [ $vbhdd == 0 ]; then
+	if [ $vbhdd -eq 0 ]; then
 		parted -a optimal "$dev" mklabel msdos
 	else
 		parted -a optimal "/dev/nbd0" mklabel msdos
 	fi
 
-	if [ ! $? == 0 ]; then
+	if [ ! $? -eq 0 ]; then
 		err_exit "Error during partition table creation\n"
 	fi
 
 	echo "Creating new Primary Active Partition on $dev"
-	if [ $vbhdd == 0 ]; then
+	if [ $vbhdd -eq 0 ]; then
 		parted -a optimal "$dev" --script -- mkpart primary hfs+ "1" "-1"
 	else
 		parted -a optimal "/dev/nbd0" --script -- mkpart primary hfs+ "1" "-1"
 	fi
-	if [ ! $? == 0 ]; then
+	if [ ! $? -eq 0 ]; then
 		err_exit "Error: cannot create new partition\n"
 	fi
-	if [ $vbhdd == 0 ]; then
+	if [ $vbhdd -eq 0 ]; then
 		parted -a optimal "$dev" print
 		parted -a optimal "$dev" set 1 boot on
 	else
@@ -570,32 +553,31 @@ function do_preptarget(){
 		parted -a optimal "/dev/nbd0" set 1 boot on
 	fi
 	sync
-	if [ $virtualdev == 1 ] && [ $vbhdd == 0 ]; then
-		if [ ! $nbd0_mapped == 1 ]; then
+	if [ $virtualdev -eq 1 ] && [ $vbhdd -eq 0 ]; then
+		if [ ! $nbd0_mapped -eq 1 ]; then
 			echo "Mapping virtual dev with qemu..."
-			qemu_map "nbd0" "$dev"
-			if [ ! $nbd0_mapped == 1 ]; then
+			if ! qemu_map "nbd0" "$dev"; then
 				err_exit "Error during nbd mapping\n"
 			fi
 		fi
 	fi
 
 	$lyellow; echo "Formatting partition as HFS+"; $normal
-	if [ $virtualdev == 1 ]; then
+	if [ $virtualdev -eq 1 ]; then
 		mkfs.hfsplus /dev/nbd0p1 -v "smx_installer"
 	else
-		mkfs.hfsplus ""$dev"1" -v "smx_installer"
+		mkfs.hfsplus "${dev}1" -v "smx_installer"
 	fi
-	if [ ! $? == 0 ]; then
+	if [ ! $? -eq 0 ]; then
 		err_exit "Error during HFS+ formatting\n"
 	fi
 
-	if [ $virtualdev == 1 ]; then
+	if [ $virtualdev -eq 1 ]; then
 		mount_part "/dev/nbd0p1" "target"
 	else
-		mount_part ""$dev"1" "target"
+		mount_part "${dev}1" "target"
 	fi
-	if [ ! "$mount_part_ret" == "err_success" ]; then
+	if [ ! $? -eq 0 ]; then
 		err_exit "Cannot mount target\n"
 	fi
 
@@ -605,13 +587,18 @@ function do_preptarget(){
 }
 
 function qemu_umount_all(){
-	local nbdmnt=($(mount | grep "/dev/nbd" | awk '{print $1}'))
-	local anbd=$(ls -1 /dev/nbd*p* | sed '$s/..$//')
-	for mount in $nbdmnt; do
-		$lyellow; echo "Unmounting "$mount"..."; $normal
-		local ures=$(umount $mount; echo $?)
-		if [ ! $ures == 0 ]; then
+	grep "/dev/nbd" /proc/mounts | awk '{print $1}' | while read mountpoint; do
+		$lyellow; echo "Unmounting "${mountpoint}"..."; $normal
+		if ! umount ${mountpoint}; then
 			err_exit "Can't unmount "$mount"\n"
+		fi
+	done
+}
+
+function qemu_unmap_all(){
+	for device in /dev/nbd?; do
+		if ! qemu-nbd -d "${device}" &>/dev/null; then
+			err_exit "Error during nbd unmapping\n"
 		fi
 	done
 }
@@ -630,19 +617,13 @@ function do_init_qemu(){
 	else
 		echo "Reloading nbd..."
 		echo "Checking for mounts..."
-		local nbdmnt=$(mount | grep -q "/dev/nbd"; echo $?)
-		if [ $nbdmnt == 0 ]; then
+		if grep -q "/dev/nbd" /proc/mounts; then
 			qemu_umount_all
+			qemu_unmap_all
 		fi
-		for ndev in $anbd; do
-			qemu-nbd -d $ndev &>/dev/null
-			if [ ! $? == 0 ]; then
-				err_exit "Error during nbd unmapping\n"
-			fi
-		done
 		rmmod nbd
 		modprobe nbd max_part=10
-		remove_nbd=1	
+		remove_nbd=1
 		nbd_reloaded=1
 	fi
 	if [ ! -b /dev/nbd0 ]; then
@@ -652,82 +633,56 @@ function do_init_qemu(){
 
 function domount_part(){
 	if [ "$3" == "silent" ]; then
-		mount "$1" -t hfsplus -o rw,force /mnt/osx/$type &>/dev/null 2>&1
+		mount "$1" -t hfsplus -o rw,force /mnt/osx/$2 &>/dev/null 2>&1
 	else
-		mount "$1" -t hfsplus -o rw,force /mnt/osx/$type
+		mount "$1" -t hfsplus -o rw,force /mnt/osx/$2
 	fi
 
-	if [ ! "$?" == "0" ]; then
-		sleep 1
-		if [ "$3" == "silent" ]; then
-			mount "$1" -t hfsplus -o rw,force /mnt/osx/$type &>/dev/null 2>&1
-		else
-			mount "$1" -t hfsplus -o rw,force /mnt/osx/$type
-		fi
-		if [ ! "$?" == "0" ]; then
-			mount_part_ret="err_mount"
-		fi
-	fi
+	return $?
+}
+
+function negate(){
+	[[ $1 -gt 0 ]] && return 0 || return 1;
 }
 
 function mount_part(){
+	local src=$1
 	local type=$2
-	local ismounted=$(mount | grep -q "$1"; echo $?)
-	local mountloc=$(mount | grep "$1" | grep -q '/mnt/osx/'; echo $?)
-	mount_part_ret="err_success"
-	if [ "$ismounted" == "0" ] && [ ! "$mountloc" == "0" ] || [ "$3" == "remount" ]; then
-		if [ "$3" == "silent" ]; then
-			umount "$1" &>/dev/null 2>&1
-		else
-			umount "$1"
-		fi
-		
-		if [ ! "$?" == "0" ]; then
-			sleep 1
-			if [ "$3" == "silent" ]; then
-				umount "$1" &>/dev/null 2>&1
-			else
-				umount "$1"
-			fi
-			if [ ! "$?" == "0" ]; then
-				mount_part_ret="err_umount"
-			fi
-		fi
-	sleep 0.1
-	domount_part "$1" "$2" "$3"
-	elif [ "$mountloc" == "0" ] || [ "$ismounted" == "0" ] && [ ! "$3" == "remount" ]; then
-		$yellow; echo "Skipping mount, already mounted"; $normal
-	else
-		domount_part "$1" "$2" "$3"
-	fi
-	
+	local flags=$3
+
+	domount_part "$src" "$type" "$flags"
+	local result=$?
+
 	if [ "$type" == "target" ]; then
-		if [ ! $(touch /mnt/osx/target/check_ro; echo $?) == 0 ]; then
+		if touch /mnt/osx/target/check_ro; then
+			rm /mnt/osx/target/check_ro
+		else
 			$lyellow; echo "Restoring volume..."; $normal
 			umount /mnt/osx/target
 			if [ $virtualdev == 1 ]; then
-				fsck.hfsplus -f -y /dev/nbd0p1
+				fsck.hfsplus -f -y /dev/nbd0p1 || err_exit "fsck failed!\n"
 				mount -t hfsplus -o rw,force /dev/nbd0p1 /mnt/osx/target
 			else
-				fsck.hfsplus -f -y ""$dev"1"
-				mount -t hfsplus -o rw,force ""$dev"1" /mnt/osx/target
+				fsck.hfsplus -f -y "${src}" || err_exit "fsck failed!\n"
+				mount -t hfsplus -o rw,force "${src}" /mnt/osx/target
 			fi
-		else
-			rm /mnt/osx/target/check_ro
+			result=$?
 		fi
 	fi
+	return $result
 }
 
 function qemu_map(){
-	qemu-nbd -d /dev/"$1" &>/dev/null
+	local nbdev=$1
+	local image=$2
+	qemu-nbd -d /dev/${nbdev} &>/dev/null
 	sleep 0.1
-	qemu-nbd -c /dev/"$1" "$2"
-	local res=$?
-	sleep 0.1
-	vartmp="$1_mapped"
-	if [ $res == 0 ]; then
-		eval ${vartmp}=1
+	qemu-nbd -f raw -c /dev/${nbdev} "${image}"
+	local result=$?
+	if [ $result -eq 0 ]; then
+		eval "${nbdev}_mappedeval=1"
 	fi
+	return $result
 }
 
 function do_kexts(){
@@ -851,7 +806,7 @@ function do_chameleon(){
 	$lyellow; echo "Installing chameleon..."; $normal
 	cp -$verbose "$scriptdir/chameleon/boot" /mnt/osx/target/
 	sync
-	
+
 	if [ -d "$scriptdir/chameleon/Themes" ]; then
 		$yellow; echo "Copying Themes..."; $normal
 		cp -R "$scriptdir/chameleon/Themes" "/mnt/osx/target/Extra/"
@@ -861,7 +816,7 @@ function do_chameleon(){
 		cp -R "$scriptdir/chameleon/Modules" "/mnt/osx/target/Extra/"
 	fi
 	sync
-	
+
 	$yellow; echo "Flashing boot record..."; $normal
 	if [ ! -f  "$scriptdir/chameleon/boot0" ]; then
 		$lred; echo "WARNING: MBR BootCode (boot0) Missing."
@@ -902,7 +857,7 @@ function do_system(){
 	else
 		#cp -pdR"$verbose" /mnt/osx/base/* /mnt/osx/target/
 		rsync -arp"$verbose" --progress /mnt/osx/base/* /mnt/osx/target/
-		
+
 		$lyellow; echo "Copying installation packages to "$dev"..." ; $normal
 		rm -$verbose /mnt/osx/target/System/Installation/Packages
 		mkdir -$verbose /mnt/osx/target/System/Installation/Packages
@@ -947,7 +902,7 @@ function detect_osx_version(){
 			err_exit "Can't detect OSX Version\n"
 		fi
 	fi
-	
+
 	local tq=0  #to quit
 	if [ -f "$verfile" ]; then
 		osbuild=$(cat "$verfile" | grep -A1 "<key>ProductBuildVersion</key>" | sed -n 2p | sed 's|[\t <>/]||g;s/string//g')
@@ -961,7 +916,7 @@ function detect_osx_version(){
 		elif [[ "$osver" =~ "10.9" ]]; then
 			osname="Mavericks"
 		elif [ ! "$osver" == "" ] && [ ! "$osbuild" == "" ]; then
-			osname="Not supported"
+			osname="Unsupported"
 			osver="version ($osver)"
 			local tq=1
 		else
@@ -977,16 +932,22 @@ function detect_osx_version(){
 		$lgreen; echo "$osname $osver detected"; $normal
 	fi
 }
-	
+
 
 function check_space {
+	local device=$1
+	local minimum=$2
 	local strict=$3
-	freespace=$(( $(df "$1" | sed -n 2p | awk '{print $4}') * 1024))
-	printf "FreeSpace:\t$freespace\n"; printf "Needed:\t\t$2\n"
-	if [ $freespace -ge $2 ]; then
+	freespace=$(( $(df "$device" | sed -n 2p | awk '{print $4}') * 1024))
+	printf "FreeSpace:\t$freespace\n"; printf "Needed:\t\t$minumum\n"
+	if [ $freespace -ge $minimum ]; then
 		return 0
 	else
-		if [ $strict == 1 ]; then err_exit "Not enough free space\n"; else return 1; fi
+		if [ $strict -eq 1 ]; then
+			err_exit "Not enough free space\n"
+		else
+			return 1
+		fi
 	fi
 }
 
@@ -997,7 +958,7 @@ function check_commands {
 		#add checks for other commands after the initial check
 	#	echo &>/dev/null
 	#else
-		commands=('udisks' 'grep' 'tput' 'dd' 'sed' 'parted' 'awk' 'mkfs.hfsplus' 'wget' 'dirname' 'basename' 'parted' 'pidof' 'gunzip' 'bunzip2' 'cpio')
+		commands=('grep' 'tput' 'dd' 'sed' 'parted' 'awk' 'mkfs.hfsplus' 'wget' 'dirname' 'basename' 'parted' 'pidof' 'gunzip' 'bunzip2' 'cpio')
 	#fi
 	for command in "${commands[@]}"; do
 		if ! check_command $command == 0; then
@@ -1053,10 +1014,10 @@ function check_command {
 	else
 		command_name=$command
 	fi
-	
+
 	type -P "$command" &>/dev/null
 	local cmdstat=$?
-	
+
 	if [ -z "$command" ] || [ "$command" == "" ]; then
 		cmdstat=1
 	fi
@@ -1064,7 +1025,7 @@ function check_command {
 	if [ $cmdstat == 0 ]; then
 		$lgreen; printf "Found\n"; $normal
 		return 0
-	elif [ $cmdstat == 1 ]; then 
+	elif [ $cmdstat == 1 ]; then
 		$lred; printf "Not Found\n"; $normal
 		if [ "$command" = "ls" ]; then
 			echo "Cygwin Seems Corrupted!"
@@ -1122,7 +1083,7 @@ function cleanup(){
 		$lred; echo "ERROR: Can't unmount basesystem!"; $normal
 		local base_umount=1
 	fi
-	
+
 	if [ ! $(mount | grep -q "/mnt/osx/target"; echo $?) == 0 ]; then
 		if [ -d "/mnt/osx/target" ] && [ $(ls -1 "/mnt/osx/target" | wc -l ) == 0 ]; then
 			yes | rm -r "/mnt/osx/target"
@@ -1151,7 +1112,6 @@ function cleanup(){
 		if [ "$ndb_reloaded" == "1" ]; then
 			modprobe nbd
 		fi
-		if [ ! -z $touchedfile ] && [ ! -z $deletedfile ] &&  [ $touchedfile -eq 1 ] && [ $deletedfile -eq 0 ] && [ $virtualdev -eq 1 ] && [ -e "$dev" ] && [ ! -b "$dev" ]; then rm "$dev"; fi
 	else
 		$lyellow; echo "Some partitions couldn't be unmounted. Check what's accessing them and unmount them manually"; $normal
 		if [ "$1" == "ret" ]; then err_exit ""; fi
@@ -1180,7 +1140,7 @@ function extract_pkg(){
 	cd "$scriptdir"
 	pkgfile="$1"
 	dest="$2"
-	
+
 	#elif [ ! $(ls "$dest" | wc -l) == 0 ]; then
 	#	usage
 	#	err_exit "Invalid Destination\n"
@@ -1190,7 +1150,7 @@ function extract_pkg(){
 		dest="$workdir/$dest"
 	fi
 	if [ ! -d "$dest" ] && [ ! -e "$dest" ]; then mkdir -p "$dest"; fi
-	
+
 	if [[ ! "$pkgfile" = /* ]]; then
 		cd "$workdir"
 		local fullpath="$workdir/$pkgfile/$(basename "$pkgfile")"
@@ -1306,7 +1266,10 @@ function compile_d2i(){
 		cd "dmg2img-"$dmgimgversion""
 		make
 		if [ ! $? == 0 ]; then
-			err_exit "dmg2img Build Failed\n"
+			$lred; echo "dmg2img Build Failed"; $normal
+			$lyellow; echo -e "Make sure you have installed the necessary build deps\nOn debian/ubuntu"; $normal
+			$white; echo "sudo apt-get build-dep dmg2img"; $normal
+			err_exit ""
 		else
 			$lgreen; echo "Build completed!"; $normal
 		fi
@@ -1408,41 +1371,50 @@ function main(){
 		SUDO_USER="root"
 	fi
 
-	if [ $# == 0 ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "help" ] || [ "$1" == "?" ] || [ "$1" == "/?" ]; then
+	if [ $# == 0 ] ||
+	[ "$1" == "-h" ] ||
+	[ "$1" == "--help" ] ||
+	[ "$1" == "help" ] ||
+	[ "$1" == "?" ] ||
+	[ "$1" == "/?" ]
+	then
 		$white; usage; $normal
 		err_exit ""
 	fi
 
-	kextdir="$scriptdir/extra_kexts"
-	kerndir="$scriptdir/kernels"
+	kextdir="${scriptdir}/extra_kexts"
+	kerndir="${scriptdir}/kernels"
 	filepath="$( cd "$( dirname "$1" 2>/dev/null)" && pwd -P)"
 	devpath="$( cd "$( dirname "$2" 2>/dev/null)" && pwd -P)"
-	script=$scriptdir
-	script+=/$(basename $0)
 
-	if [ "$(mount | grep -q "/mnt"; echo $?)" == "0" ]; then
+	if grep -q "/mnt" /proc/mounts; then
+		$lyellow; echo "Unmounting /mnt..."; $normal
 		umount /mnt
-		if [ "$(mount | grep -q "/mnt"; echo $?)" == "0" ]; then
+		if grep -q "/mnt" /proc/mounts; then
 			err_exit "/mnt busy, cannot continue\n"
 		fi
 	fi
+	# Create working dir
 	if [ ! -d /mnt/osx ]; then mkdir -p /mnt/osx; fi
+	# Create ESD mountpoint
 	if [ ! -d /mnt/osx/esd ]; then mkdir /mnt/osx/esd; fi
+	# Create BaseSystem mountpoint
 	if [ ! -d /mnt/osx/base ]; then mkdir /mnt/osx/base; fi
+	# Create target mountpoint
 	if [ ! -d /mnt/osx/target ]; then mkdir /mnt/osx/target; fi
 
-	for ((c=0;c<3;c++)); do
-		local vartmp="nbd"$c"_mapped"
-		eval ${vartmp}=0
-	done
+	nbd0_mapped=0
+	nbd1_mapped=0
+	nbd2_mapped=0
+
 	do_init_qemu
 
 	##File Details
 	#name --> filename.extension
 	#extension --> ".img", ".tar", ".dmg",..
 	#filename --> filename without extension
-	file=$1
-	dev=$2
+	file="$1"
+	dev="$2"
 	size=$3 #for img creation
 
 	virtualdev=0
@@ -1470,24 +1442,39 @@ function main(){
 	docheck_xar
 
 	mkrecusb=0
-	if [ -b "$1" ] && [ ! -f "$1" ] && [ ! -d "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then #./install_osx.sh [dev]
+	if [ -b "$1" ] &&
+		[ ! -f "$1" ] &&
+		[ ! -d "$1" ] &&
+		[ -z "$2" ] &&
+		[ -z "$3" ]
+	then #./install_osx.sh [dev]
 		dev="$1"
 		mediamenu
 	elif [ -f "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then #./install_osx.sh [file]
 		if [ "$extension" == ".dmg" ]; then #./install_osx.sh [file.dmg]
 			usage
 			err_exit "You must specify a valid target drive or image\n"
-		elif [ "$extension" == ".img" ] || [ "$extension" == ".hdd" ] || [ "$extension" == ".vhd" ] || [ "$extension" == ".vdi" ] || [ "$extension" == ".vmdk" ]; then #./install_osx.sh [file.img]
+		elif [ "$extension" == ".img" ] ||
+			[ "$extension" == ".hdd" ] ||
+			[ "$extension" == ".vhd" ] ||
+			[ "$extension" == ".vdi" ] ||
+			[ "$extension" == ".vmdk" ]
+		then #./install_osx.sh [file.img]
 			dev="$1"
 			virtualdev=1
 			mediamenu
 		fi
-	elif [ ! -b "$1" ] && [ ! -f "$1" ] && [ ! -d "$1" ] && [ -z "$2" ] && [ -z "$3" ]; then
-		err_exit "No such device \n"
+	elif [ ! -b "$1" ] &&
+		[ ! -f "$1" ] &&
+		[ ! -d "$1" ] &&
+		[ -z "$2" ] &&
+		[ -z "$3" ]
+	then
+		err_exit "No such device\n"
 	fi
 
 	if [ "$extension" == ".pkg" ] || [ "$extension" == ".mpkg" ]; then #./install_osx.sh [file.pkg/mpkg]
-		if [ -z "$2" ] || [ "$2" == "" ] || [ "$2" == " " ]; then #no dest dir
+		if [ -z "$2" ]; then #no dest dir
 			usage
 			err_exit "Invalid Destination Folder\n"
 		fi
@@ -1504,38 +1491,40 @@ function main(){
 			fi
 	fi
 
-	if [ -z "$dev" ] || [ "$dev" == "" ] || [ "$dev" == " " ]; then
+	if [ -z "${dev}" ]; then
 		usage
 		err_exit "You must specify a valid target drive or image\n"
 	fi
 
-	if [ ! -b "$dev" ]; then
-		isdev=$(echo "$dev" | grep -q "/dev/"; echo $?)
-		if [ "$isdev" == "0" ]; then
-			err_exit "No such device\n"
-		elif [ "$dextension" == ".img" ] || [ "$dextension" == ".hdd" ] || [ "$dextension" == ".vhd" ] || [ "$dextension" == ".vdi" ] || [ "$dextension" == ".vmdk" ]; then
+	if [ ! -b "${dev}" ]; then
+		if [ "$dextension" == ".img" ] ||
+			[ "$dextension" == ".hdd" ] ||
+			[ "$dextension" == ".vhd" ] ||
+			[ "$dextension" == ".vdi" ] ||
+			[ "$dextension" == ".vmdk" ]
+		then
 			vdev_check "$2" #switch to Virtual HDD mode & check
 		fi
 	fi
 
-	if [ -e $configfile ]; then
-		set_from_config		#read config file
-		check_config_vars	#check if config is valid
+	# This isn't implemented yet
+	if false; then
+		if [ -e $configfile ]; then
+			set_from_config		#read config file
+			check_config_vars	#check if config is valid
+		fi
 	fi
+
 	if [ -z $commands_checked ]; then	commands_checked=0; fi
 	if [ $commands_checked == 0 ]; then
 		check_commands	#Check all required commands exist
 		commands_checked=1
 		export commands_checked
 	fi
-
-	local iscdrom=$(echo "$1" | grep -q "/dev/sr[0-9]" ;echo $?)
-	if [ -b "$1" ] && [ "$iscdrom" == "0" ]; then
+	if [[ $1 == "/dev/sr[0-9]" ]]; then
 		$lgreen; echo "CD Source Device Detected"; $normal
-		if [ -z $2 ] || [ "$2" == "" ] || [ "$2" == " " ]; then
+		if [ -z $2 ] || [ -d "$2" ] || [ "$2" == "" ]; then
 			err_exit "You must specify a valid destination to create an img file\n"
-		elif [ -d "$2" ]; then
-			err_exit "You must provide a filename\n"
 		elif [ -f "$2" ]; then
 			err_exit "$2 already exists\n"
 		else
@@ -1553,7 +1542,7 @@ function main(){
 	fi
 
 	do_preptarget
-	if [ $mkrecusb == 1 ]; then
+	if [ $mkrecusb -eq 1 ]; then
 		do_finalize
 		err_exit ""
 	fi
@@ -1573,20 +1562,16 @@ function main(){
 
 	$lyellow; echo "Mapping image with qemu..."; $normal
 	if [ ! $nbd1_mapped == 1 ]; then
-		qemu_map "nbd1" "$outfile"
-		if [ ! $nbd1_mapped == 1 ]; then
+		if ! qemu_map "nbd1" "$outfile"; then
 			err_exit "Error during image mapping\n"
 		fi
 	fi
 
 	$yellow; echo "Mounting Partitions..."; $normal
 
-	mount_part "/dev/nbd1p2" "esd"
-	if [ ! "$mount_part_ret" == "err_success" ]; then
-		mount_part "/dev/nbd1p3" "esd"
-		if [ ! "$mount_part_ret" == "err_success" ]; then
+	if ! mount_part "/dev/nbd1p2" "esd" &&
+		 ! mount_part "/dev/nbd1p3" "esd"; then
 			err_exit "Cannot mount esd\n"
-		fi
 	fi
 
 	detect_osx_version
@@ -1604,14 +1589,12 @@ function main(){
 
 		echo "Mapping BaseSystem with qemu..."
 		if [ ! $nbd2_mapped == 1 ]; then
-			qemu_map "nbd2" "$outfile"
-			if [ ! $nbd2_mapped == 1 ]; then
+			if ! qemu_map "nbd2" "$outfile"; then
 				err_exit "Error during BaseSystem mapping\n"
 			fi
 		fi
 
-		mount_part "/dev/nbd2p2" "base"
-		if [ ! "$mount_part_ret" == "err_success" ]; then
+		if ! mount_part "/dev/nbd2p2" "base"; then
 			err_exit "Cannot mount BaseSystem\n"
 		fi
 		detect_osx_version

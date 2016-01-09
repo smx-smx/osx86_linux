@@ -12,7 +12,7 @@ function err_exit() {
 	exit 1
 }
 
-initlog;
+initlog
 if [ ! -f "install_osx.sh" ]; then err_exit "Can't find install_osx.sh"; fi
 ./install_osx.sh "$@" 2>&1 | tee "$logfile"
 if [ "$SUDO_USER"=="" ]; then SUDO_USER="root"; fi
