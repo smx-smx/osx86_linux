@@ -23,7 +23,7 @@ if [ $rev -gt 0 ]; then
 else
 	program_revision="git"
 fi
-configfile="config.cfg"
+#configfile="config.cfg"
 
 if [ -z $really_verbose ]; then
 	really_verbose=0
@@ -138,7 +138,9 @@ function mediamenu(){
 			mediamenu
 			;;
 		8)
-			cleanup "ret"
+			if ! cleanup; then
+				err_exit ""
+			fi
 			if [ $virtualdev == 1 ]; then
 				$lred; echo "WARNING: You are about to delete "$dev" content!"
 				read -p "Are you really sure you want to continue? (y/n)" -n1 -r
@@ -604,8 +606,6 @@ function qemu_unmap_all(){
 
 function do_init_qemu(){
 	echo "Setting qemu-nbd dev..."
-	remove_nbd=0
-	nbd_reloaded=0
 	if [ ! -b /dev/nbd0 ]; then
 		modprobe nbd max_part=10
 		$lyellow; echo "Waiting for nbd to be fully loaded"; $normal
@@ -615,7 +615,6 @@ function do_init_qemu(){
 		if [ ! -b /dev/nbd0 ]; then
 			err_exit "Error while loading module \"nbd\"\n"
 		fi
-		remove_nbd=1
 	else
 		echo "Reloading nbd..."
 		echo "Checking for mounts..."
@@ -625,8 +624,6 @@ function do_init_qemu(){
 		fi
 		rmmod nbd
 		modprobe nbd max_part=10
-		remove_nbd=1
-		nbd_reloaded=1
 	fi
 	if [ ! -b /dev/nbd0 ]; then
 		err_exit "Cannot load qemu nbd kernel module\n"
@@ -965,15 +962,6 @@ function check_commands {
 	done
 }
 
-function checkfile {
-	local file=$1
-	if [ ! -e "$1" ]; then
-		return 1
-	else
-		return 0
-	fi
-}
-
 function find_cmd {
 	cmd=$1
 	cmdir=$2
@@ -983,10 +971,9 @@ function find_cmd {
 		eval ${cmd}="$scriptdir/$cmd"
 	fi
 
-	if ! checkfile "${!cmd}" == 0; then
-		eval ${cmd}="./$cmd"
-	fi
-	if ! checkfile "${!cmd}" == 0; then
+
+	[ -e "${!cmd}" ] && eval ${cmd}="./$cmd"
+	if [ -e "${!cmd}" ]; then
 		which $cmd &>/dev/null
 		if [ ! $? == 0 ]; then #command not found
 			unset ${cmd} #unset cmd location var
@@ -1014,7 +1001,7 @@ function check_command {
 	type -P "$command" &>/dev/null
 	local cmdstat=$?
 
-	if [ -z "$command" ] || [ "$command" == "" ]; then
+	if [ -z "$command" ]; then
 		cmdstat=1
 	fi
 	$lcyan; printf "$command_name: "
@@ -1023,9 +1010,6 @@ function check_command {
 		return 0
 	elif [ $cmdstat == 1 ]; then
 		$lred; printf "Not Found\n"; $normal
-		if [ "$command" = "ls" ]; then
-			echo "Cygwin Seems Corrupted!"
-		fi
 		return 1
 	else
 		$lightgray; printf "Unknown Error\n"; $normal
@@ -1045,79 +1029,65 @@ function err_wexit() {
 function err_exit() {
 	$lred; printf "$1"; $normal
 	cleanup
-	if [ "$1" == "" ]; then
+	if [ -z "$1" ]; then
 		exit 0
 	else
 		exit 1
 	fi
 }
 
-function cleanup(){
+function isEmpty() {
+	local dir=$1
+	if [ $(( $(ls -a1 "${dir}" | wc -l) - 2)) -eq 0 ]; then
+		return 0 #good, it's empty
+	else
+		return 1 #bad, not empty
+	fi
+}
+
+function cleanup() {
 	sync
-	local esd_umount=0
-	local base_umount=0
-	local target_umount=0
-	if [ ! "$scriptdir/tmp" == "/tmp" ] && [ -d "$scriptdir/tmp" ]; then rm -r "$scriptdir/tmp"; fi
-	if [ $(mount | grep -q "/mnt/osx/esd"; echo $?) == 0 ]; then umount `mount | grep "/mnt/osx/esd" | awk '{print $3}'`; fi
-	if [ $(mount | grep -q "/mnt/osx/base"; echo $?) == 0 ]; then umount `mount | grep "/mnt/osx/base" | awk '{print $3}'`; fi
-	if [ $(mount | grep -q "/mnt/osx/target"; echo $?) == 0 ]; then umount `mount | grep "/mnt/osx/target" | awk '{print $3}'`; fi
-
-	if [ ! $(mount | grep -q "/mnt/osx/esd"; echo $?) == 0 ]; then
-		if [ -d "/mnt/osx/esd" ] && [ $(ls -1 "/mnt/osx/esd" | wc -l ) == 0 ]; then
-			yes | rm -r "/mnt/osx/esd"
-		fi
-		esd_umount=1
-	else
-		$lred; echo "ERROR: Can't unmount esd!"; $normal
-	fi
-	if [ ! $(mount | grep -q "/mnt/osx/base"; echo $?) == 0 ]; then
-		if [ -d "/mnt/osx/base" ] && [ $(ls -1 "/mnt/osx/base" | wc -l ) == 0 ]; then
-			yes | rm -r "/mnt/osx/base"
-		fi
-		base_umount=1
-	else
-		$lred; echo "ERROR: Can't unmount basesystem!"; $normal
-		local base_umount=1
+	if [ ! "${scriptdir}/tmp" == "/tmp" ] && [ -d "${scriptdir}/tmp" ]; then
+		rm -r "${scriptdir}/tmp"
 	fi
 
-	if [ ! $(mount | grep -q "/mnt/osx/target"; echo $?) == 0 ]; then
-		if [ -d "/mnt/osx/target" ] && [ $(ls -1 "/mnt/osx/target" | wc -l ) == 0 ]; then
-			yes | rm -r "/mnt/osx/target"
+	qemu_umount_all
+	qemu_unmap_all
+
+	if grep -q "/mnt/osx/target" /proc/mounts; then
+	 	umount /mnt/osx/target
+		if grep -q "/mnt/osx/target" /proc/mounts; then
+			$lred; echo "ERROR: Can't unmount target!"; $normal
 		fi
-		target_umount=1
-	else
-		$lred; echo "ERROR: Can't unmount target!"; $normal
-		local target_umount=1
 	fi
-	if [ -d "/mnt/osx" ] && [ $(ls -1 "/mnt/osx" | wc -l) == 0 ]; then
-		yes | rm -r "/mnt/osx"
+
+	if [ -b /dev/nbd0 ]; then
+		if ! rmmod nbd; then
+			$lred; echo "WARNING: Cannot unload nbd"; $normal
+		fi
 	fi
-	if [ $esd_umount == 1 ] && [ $base_umount == 1 ] && [ $target_umount == 1 ]; then
-		if [ -b /dev/nbd0 ]; then
-			for d in $(ls /dev/nbd?); do
-				qemu-nbd -d $d &>/dev/null
-			done
+
+	local result=0
+	for mountpoint in base esd target; do
+		if isEmpty "/mnt/osx/${mountpoint}"; then
+			rmdir "/mnt/osx/${mountpoint}"
+		else
+			result=1
 		fi
-		if [ "$remove_nbd" == "1" ]; then
-			local res=$(rmmod nbd 2>&1)
-			echo $res | sed 's/.*:\ //g'
-			if [ "$nbd_reloaded" == "1" ]; then
-				modprobe nbd
-			fi
-		fi
-		if [ "$ndb_reloaded" == "1" ]; then
-			modprobe nbd
-		fi
+	done
+
+	if isEmpty "/mnt/osx"; then
+		rmdir /mnt/osx
 	else
 		$lyellow; echo "Some partitions couldn't be unmounted. Check what's accessing them and unmount them manually"; $normal
-		if [ "$1" == "ret" ]; then err_exit ""; fi
+		result=1
 	fi
-#fi
+
+	return $result
 }
 
 function payload_extractor(){
 	cd "$(dirname "$1")"
-	#echo "$(pwd -P)"
 	local fmt=$(file --mime-type $(basename "$1") | awk '{print $2}' | grep -o x.* | sed 's/x-//g')
 	local unarch
 	if [ "$fmt" == "gzip" ]; then
@@ -1137,10 +1107,6 @@ function extract_pkg(){
 	pkgfile="$1"
 	dest="$2"
 
-	#elif [ ! $(ls "$dest" | wc -l) == 0 ]; then
-	#	usage
-	#	err_exit "Invalid Destination\n"
-	#fi
 	cd "$scriptdir"
 	if [[ ! "$dest" = /* ]]; then
 		dest="$workdir/$dest"
