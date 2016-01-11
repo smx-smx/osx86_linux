@@ -92,13 +92,14 @@ function mediamenu(){
 	echo "2  - Manage chameleon Modules"
 	echo "3  - Manage kernels"
 	echo "4  - Reinstall / Update chameleon"
-	echo "5  - Install / Reinstall MBR Patch"
-	echo "6  - Install / Reinstall Custom DSDT"
-	echo "7  - Install / Reinstall SMBios"
-	echo "8  - Erase Setup"
-	echo "9  - Delete Kext Cache"
-	echo "10 - Tweaks Menu"
-	echo "0 - Exit"
+	echo "5  - Reinstall stock kernel"
+	echo "6  - Install / Reinstall MBR Patch"
+	echo "7  - Install / Reinstall Custom DSDT"
+	echo "8  - Install / Reinstall SMBios"
+	echo "9  - Erase Setup"
+	echo "10 - Delete Kext Cache"
+	echo "11 - Tweaks Menu"
+	echo "0  - Exit"
 	$white; printf "Choose an option: "; read choice; $normal
 	case "$choice" in
 		0)
@@ -124,21 +125,25 @@ function mediamenu(){
 			mediamenu
 			;;
 		5)
+			do_kernel "target"
+			mediamenu
+			;;
+		6)
 			docheck_mbr
 			pause; clear
 			mediamenu
 			;;
-		6)
+		7)
 			docheck_dsdt
 			pause; clear
 			mediamenu
 			;;
-		7)
+		8)
 			docheck_smbios
 			pause; clear
 			mediamenu
 			;;
-		8)
+		9)
 			if ! cleanup; then
 				err_exit ""
 			fi
@@ -165,11 +170,11 @@ function mediamenu(){
 			fi
 			err_exit ""
 			;;
-		9)
+		10)
 			do_remcache
 			mediamenu
 			;;
-		10)
+		11)
 			clear
 			tweakmenu
 			mediamenu
@@ -845,6 +850,35 @@ function do_chameleon(){
 	sync
 }
 
+function do_kernel(){
+	# Source of kernel files
+	mountpoint=$1
+	$yellow; echo "Copying kernel..."; $normal
+	local kernel_cache_path="System/Library/Caches/com.apple.kext.caches/Startup/kernelcache"
+	local osver_minor=$(echo $osver | cut -d '.' -f2)
+	# Mavericks and above
+	if [ $osver_minor -ge 9 ]; then
+		$lyellow; echo "Kernel is in BaseSystemBinaries.pkg, extracting..."; $normal
+		local esd_path
+		if [ ! "$mountpoint" == "esd" ]; then
+			target_path="System/Installation"
+		fi
+		extract_pkg "/mnt/osx/${mountpoint}/${target_path}/Packages/BaseSystemBinaries.pkg" "${scriptdir}/tmp/bsb" "skip"
+		if [ $osver_minor -eq 9 ]; then
+			cp -a $verbose "${scriptdir}/tmp/bsb/mach_kernel" "/mnt/osx/target/"
+		else
+			cp -a $verbose "${scriptdir}/tmp/bsb/${kernel_cache_path}" "/mnt/osx/target/${kernel_cache_path}"
+		fi
+	# This won't work from mediamenu and < 10.10 (esd not mounted there)
+	elif [ -f "/mnt/osx/esd/mach_kernel" ]; then
+		cp -av /mnt/osx/esd/mach_kernel /mnt/osx/target/
+	fi
+	if [ ! -f "/mnt/osx/target/mach_kernel" ] && [ ! -f "/mnt/osx/target/${kernel_cache_path}" ]; then
+		$lred; echo "WARNING! Kernel installation failed!!"
+		echo "Media will likely be unbootable!"; $normal
+	fi
+}
+
 function do_system(){
 	$lyellow; echo "Copying Base System to "$dev"..."; $normal
 	if [[ "$osver" =~ "10.6" ]]; then
@@ -860,18 +894,6 @@ function do_system(){
 		#cp -pdR"$verbose" /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
 		rsync -arp $verbose /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
 		sync
-		$yellow; echo "Copying kernel..."; $normal
-		if [[ "$osver" =~ "10.9" ]]; then
-			$lyellow; echo "Kernel is in BaseSystemBinaries.pkg, extracting..."; $normal
-			extract_pkg "/mnt/osx/esd/Packages/BaseSystemBinaries.pkg" "$scriptdir/tmp/bsb" "skip"
-			cp -a $verbose "$scriptdir/tmp/bsb/mach_kernel" "/mnt/osx/target/"
-		elif [ -f "/mnt/osx/esd/mach_kernel" ]; then
-			cp -av /mnt/osx/esd/mach_kernel /mnt/osx/target/
-		fi
-		if [ ! -f /mnt/osx/target/mach_kernel ]; then
-			$lred; echo "WARNING! Kernel Copy Error!!"
-			echo "Media won't boot without kernel!"; $normal
-		fi
 	fi
 	sync
 }
@@ -967,24 +989,23 @@ function check_commands {
 }
 
 function find_cmd {
+	# Command to look for
 	cmd=$1
-	cmdir=$2
-	if [ ! -z "$cmdir" ]; then
-		eval ${cmd}="$scriptdir/$cmdir/$cmd"
+	# Preferred search dir
+	cmd_dir=$2
+
+	local cmd_path
+	if [ ! -z "$cmd_dir" ]; then
+		cmd_path="${cmd_dir}/${cmd}"
 	else
-		eval ${cmd}="$scriptdir/$cmd"
+		cmd_path="$(type -P "${cmd}")"
 	fi
 
-
-	[ -e "${!cmd}" ] && eval ${cmd}="./$cmd"
-	if [ -e "${!cmd}" ]; then
-		which $cmd &>/dev/null
-		if [ ! $? == 0 ]; then #command not found
-			unset ${cmd} #unset cmd location var
-			unset cmd #unset cmd var
-		else #command located
-			eval ${cmd}=$cmd #cmd location is cmd
-		fi
+	# Store the command path in the command-named variable (ex xar -> $xar)
+	if [ -e "${cmd_path}" ]; then
+		eval ${cmd}=${cmd_path}
+	else
+		unset ${cmd}
 	fi
 
 	#echo "Arg   --> $cmd"
@@ -1073,7 +1094,7 @@ function cleanup() {
 
 	local result=0
 	for mountpoint in base esd target; do
-		if isEmpty "/mnt/osx/${mountpoint}"; then
+		if [ -d "/mnt/osx/${mountpoint}" ] && isEmpty "/mnt/osx/${mountpoint}"; then
 			rmdir "/mnt/osx/${mountpoint}"
 		else
 			result=1
@@ -1091,63 +1112,82 @@ function cleanup() {
 }
 
 function payload_extractor(){
-	cd "$(dirname "$1")"
-	local fmt=$(file --mime-type $(basename "$1") | awk '{print $2}' | grep -o x.* | sed 's/x-//g')
+	payload="$1"
+	local fmt=$(file --mime-type "${payload}" | awk '{print $2}' | grep -o x.* | sed 's/x-//g')
+	local cpio="cpio -i --no-absolute-filenames"
 	local unarch
+
+	local gunzip
+	local bunzip2
+	local pbzx
+
 	if [ "$fmt" == "gzip" ]; then
-		unarch="gunzip"
+		find_cmd "gunzip" ""
+		$gunzip -dc "${payload}" | ${cpio}
 	elif [ "$fmt" == "bzip2" ]; then
-		unarch="bunzip2"
+		find_cmd "bunzip2" ""
+		$bunzip2 -dc "${payload}" | ${cpio}
+	else
+		find_cmd "pbzx" "${scriptdir}"
+		$pbzx "${payload}" | xz -dc | ${cpio}
 	fi
-	cat "$(basename "$1")" | $unarch -dc | cpio -i &>/dev/null
 	if [ ! $? == 0 ]; then
-		$lred; echo "WARNING: "$(dirname "$1")" Extraction failed"; $normal
+		$lred; echo "WARNING: "${payload}" Extraction failed"; $normal
 	fi
-	cd "$dest"
 }
 
 function extract_pkg(){
-	cd "$scriptdir"
 	pkgfile="$1"
 	dest="$2"
+	prompt="$3" #"skip" to avoid it
 
-	cd "$scriptdir"
-	if [[ ! "$dest" = /* ]]; then
-		dest="$workdir/$dest"
-	fi
-	if [ ! -d "$dest" ] && [ ! -e "$dest" ]; then mkdir -p "$dest"; fi
-
+	local fullpath
+	# if it's a relative path
 	if [[ ! "$pkgfile" = /* ]]; then
-		cd "$workdir"
-		local fullpath="$workdir/$pkgfile/$(basename "$pkgfile")"
+		fullpath="$(pwd -P)/${dest}"
+	else
+		fullpath="${dest}"
 	fi
-	local fullpath=$(cd $(dirname "$pkgfile"); pwd -P)/$(basename "$pkgfile")
-	cd "$dest"
-	$yellow; echo "Extracting $1"; $normal
-	$xar -xf  "$fullpath"
+
+	if [ ! -d "$fullpath" ] && [ ! -e "$fullpath" ]; then
+		mkdir -p "$fullpath"
+	fi
+
+	$yellow; echo "Extracting ${pkgfile} to ${fullpath}"; $normal
+
+	pushd "${fullpath}" &>/dev/null
+	if ! $xar -xf  "${pkgfile}"; then
+		popd &>/dev/null
+		$lred; echo "${pkgfile} extraction failed!"
+		return $result
+	fi
+
 	local pkgext=".${pkgfile##*.}"
-	if [ "$pkgext" == ".pkg" ]; then
-		$lyellow; echo "Extracting Payloads..."; $normal
-		find . -type f -name "Payload" -exec echo "Extracting {}" \; -exec bash -c 'payload_extractor "$0"' {} \;
-		if [ ! "$3" == "skip" ]; then
-			read -p "Do you want to remove temporary packed payloads? (y/n)" -n1 -r
-			echo
-			if [[ $REPLY =~ ^[Yy]$ ]] || [ "$pkg_keep_payloads" == "false" ];then
-				echo "Removing Packed Files..."
-				find . -type f -name "Payload" -delete
-				find . -type f -name "Scripts" -delete
-				find . -type f -name "PackageInfo" -delete
-				find . -type f -name "Bom" -delete
-			fi
-		fi
-	elif [ "$extension" == ".mpkg" ]; then
-		if [ -f "$dest/$(basename "$pkgfile")" ]; then #dummy mpkg in mpkg
-			rm "$dest/$(basename "$pkgfile")"
+	$lyellow; echo "Extracting Payloads..."; $normal
+	find . -type f -name "Payload" -print0 | while read -r -d '' payload; do
+		echo "Extracting "${payload}"..."
+		payload_extractor "${payload}"
+	done
+	popd &>/dev/null
+	if [ ! "$prompt" == "skip" ]; then
+		read -p "Do you want to remove temporary packed payloads? (y/n)" -n1 -r
+		echo
+		if [[ $REPLY =~ ^[Yy]$ ]] || [ "$pkg_keep_payloads" == "false" ];then
+			echo "Removing Packed Files..."
+			find . -type f -name "Payload" -delete
+			find . -type f -name "Scripts" -delete
+			find . -type f -name "PackageInfo" -delete
+			find . -type f -name "Bom" -delete
 		fi
 	fi
-	cd "$scriptdir"
-	chown -R "$SUDO_USER":"$SUDO_USER" "$dest"
-	chmod -R 777 "$dest"
+	if [ -f "$dest/$(basename "$pkgfile")" ]; then #dummy mpkg in mpkg
+		rm "$dest/$(basename "$pkgfile")"
+	fi
+
+	chown -R "$SUDO_USER":"$SUDO_USER" "${fullpath}"
+	chmod -R 666 "${fullpath}"
+
+	return 0
 }
 
 function docheck_xar(){
@@ -1156,7 +1196,7 @@ function docheck_xar(){
 		cd "$scriptdir"
 		cd "$dest"
 		$white; echo "Looking for compiled xar..."; $normal
-		find_cmd "xar" "xar_bin/bin"
+		find_cmd "xar" "${scriptdir}/xar_bin/bin"
 		if [ -z "$xar" ]; then
 			err_exit "Something wrong, xar command missing\n"
 		fi
@@ -1198,6 +1238,17 @@ function compile_xar(){
 		chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver".tar.gz"
 		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver""
 		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar_bin"
+}
+
+function docheck_pbzx(){
+	if [ -z "$pbzx" ]; then
+		$lyellow; echo "Compiling pbzx..."; $normal
+		gcc -Wall -pedantic "${scriptdir}/pbzx.c" -o "${scriptdir}/pbzx"
+		if [ ! $? -eq 0 ]; then
+			err_exit "pbzx Build Failed\n"
+		fi
+		pbzx="${scriptdir}/pbzx"
+	fi
 }
 
 function docheck_dmg2img(){
@@ -1322,14 +1373,13 @@ function main(){
 
 	echo "Version: $program_revision"
 
-	export -f payload_extractor
+	# Export APIs for tweaks
 	export -f do_remcache
 	export -f do_kextperms
 	export -f docheck_smbios
 	export -f docheck_dsdt
 	export -f docheck_mbr
 	export -f mount_part
-
 	export -f check_commands
 	mediamenu=0
 
@@ -1402,10 +1452,23 @@ function main(){
 	dextension=".${dname##*.}"
 	dfilename="${dname%.*}"
 
-	find_cmd "xar" "xar_bin/bin"
-	find_cmd "dmg2img" "dmg2img_bin/usr/bin"
-	docheck_dmg2img
+	find_cmd "xar" "${scriptdir}/xar_bin/bin"
 	docheck_xar
+	find_cmd "dmg2img" "${scriptdir}/dmg2img_bin/usr/bin"
+	docheck_dmg2img
+	find_cmd "pbzx" "${scriptdir}"
+	docheck_pbzx
+
+	$green
+	echo "== External Dependencies =="
+	$white
+	echo "xar     => ${xar}"
+	echo "dmg2img => ${dmg2img}"
+	echo "pbzx    => ${pbzx}"
+	$normal
+	if [ ! -f "${xar}" ] || [ ! -f "${dmg2img}" ] || [ ! -f "${pbzx}" ]; then
+		err_exit "Invalid dependencies, cannot continue!\n"
+	fi
 
 	mkrecusb=0
 	if [ -b "$1" ] &&
@@ -1564,6 +1627,8 @@ function main(){
 	detect_osx_version
 
 	do_system
+	do_kernel "esd"
+
 	if [ ! "$patchmbr" == "false" ]; then
 		docheck_mbr
 	fi
