@@ -1059,11 +1059,7 @@ function err_wexit() {
 function err_exit() {
 	$lred; printf "$1"; $normal
 	cleanup
-	if [ -z "$1" ]; then
-		exit 0
-	else
-		exit 1
-	fi
+	exit 1
 }
 
 function isEmpty() {
@@ -1184,6 +1180,13 @@ function extract_pkg(){
 		payload_extractor "${payload}"
 	done
 	popd &>/dev/null
+
+	if [ ${EUID} -eq 0 ]; then
+		chown -R "$SUDO_USER":"$SUDO_USER" "${dstpath}"
+	fi
+	find "${dstpath}" -type d -exec chmod 755 {} \;
+	find "${dstpath}" -type f -exec chmod 666 {} \;
+
 	if [ ! "$prompt" == "skip" ]; then
 		read -p "Do you want to remove temporary packed payloads? (y/n)" -n1 -r
 		echo
@@ -1195,9 +1198,6 @@ function extract_pkg(){
 			find ${dstpath} -type f -name "Bom" -delete
 		fi
 	fi
-
-	chown -R "$SUDO_USER":"$SUDO_USER" "${dstpath}"
-	chmod -R 666 "${dstpath}"
 
 	return 0
 }
@@ -1335,7 +1335,7 @@ function check_config_vars {
 		if [ ${!var} != "false" ] && [ ${!var} != "true" ]; then
 			$lred; echo "ERROR! Bad Config File.		$var can only be true or false		current value is ${!var}"; $normal
 			cleanup
-			exit
+			exit 1
 		fi
 	done
 
@@ -1444,7 +1444,8 @@ function main(){
 			err_exit "Invalid Destination Folder\n"
 		fi
 		extract_pkg "$1" "$2"
-		err_exit ""
+		cleanup
+		exit 0
 	fi
 
 	kextdir="${scriptdir}/extra_kexts"
@@ -1484,7 +1485,7 @@ function main(){
 		err_exit "This script can only be run under Linux\n"
 	fi
 
-	if [ "$(id -u)" != "0" ]; then
+	if [ ! ${EUID} -eq 0 ]; then
 	   err_exit "This script must be run as root\n"
 	fi
 
@@ -1667,7 +1668,7 @@ function main(){
 			fi
 		fi
 	fi
-	err_exit ""
+	exit 0
 }
 
 main "$@"
