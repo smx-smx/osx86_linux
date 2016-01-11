@@ -589,12 +589,15 @@ function do_preptarget(){
 }
 
 function qemu_umount_all(){
+	local result=0
 	grep "/dev/nbd" /proc/mounts | awk '{print $1}' | while read mountpoint; do
 		$lyellow; echo "Unmounting "${mountpoint}"..."; $normal
 		if ! umount ${mountpoint}; then
-			err_exit "Can't unmount "$mount"\n"
+			$lred; echo "Can't unmount "$mount""; $normal
+			result=1
 		fi
 	done
+	return $result
 }
 
 function qemu_unmap_all(){
@@ -620,7 +623,9 @@ function do_init_qemu(){
 		echo "Reloading nbd..."
 		echo "Checking for mounts..."
 		if grep -q "/dev/nbd" /proc/mounts; then
-			qemu_umount_all
+			if ! qemu_umount_all; then
+				err_exit ""
+			fi
 			qemu_unmap_all
 		fi
 		rmmod nbd
