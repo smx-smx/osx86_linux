@@ -1098,19 +1098,21 @@ function cleanup() {
 	fi
 
 	local result=0
-	for mountpoint in base esd target; do
-		if [ -d "/mnt/osx/${mountpoint}" ] && isEmpty "/mnt/osx/${mountpoint}"; then
-			rmdir "/mnt/osx/${mountpoint}"
+	if [ -d /mnt/osx ]; then
+		for mountpoint in base esd target; do
+			if [ -d "/mnt/osx/${mountpoint}" ] && isEmpty "/mnt/osx/${mountpoint}"; then
+				rmdir "/mnt/osx/${mountpoint}"
+			else
+				result=1
+			fi
+		done
+
+		if isEmpty "/mnt/osx"; then
+			rmdir /mnt/osx
 		else
+			$lyellow; echo "Some partitions couldn't be unmounted. Check what's accessing them and unmount them manually"; $normal
 			result=1
 		fi
-	done
-
-	if isEmpty "/mnt/osx"; then
-		rmdir /mnt/osx
-	else
-		$lyellow; echo "Some partitions couldn't be unmounted. Check what's accessing them and unmount them manually"; $normal
-		result=1
 	fi
 
 	return $result
@@ -1118,7 +1120,7 @@ function cleanup() {
 
 function payload_extractor(){
 	payload="$1"
-	local fmt=$(file --mime-type "${payload}" | awk '{print $2}' | grep -o x.* | sed 's/x-//g')
+	local fmt=$(file -b --mime-type "${payload}")
 	local cpio="cpio -i --no-absolute-filenames"
 	local unarch
 
@@ -1126,10 +1128,10 @@ function payload_extractor(){
 	local bunzip2
 	local pbzx
 
-	if [ "$fmt" == "gzip" ]; then
+	if [[ "$fmt" =~ "gzip" ]]; then
 		find_cmd "gunzip" ""
 		$gunzip -dc "${payload}" | ${cpio}
-	elif [ "$fmt" == "bzip2" ]; then
+	elif [[ "$fmt" =~ "bzip2" ]]; then
 		find_cmd "bunzip2" ""
 		$bunzip2 -dc "${payload}" | ${cpio}
 	else
@@ -1146,22 +1148,30 @@ function extract_pkg(){
 	dest="$2"
 	prompt="$3" #"skip" to avoid it
 
-	local fullpath
+	local srcpath
+	local dstpath
+
 	# if it's a relative path
 	if [[ ! "$pkgfile" = /* ]]; then
-		fullpath="$(pwd -P)/${dest}"
+		srcpath="$(pwd -P)/${pkgfile}"
 	else
-		fullpath="${dest}"
+		srcpath="${pkgfile}"
+	fi
+	# if it's a relative path
+	if [[ ! "$dest" = /* ]]; then
+		dstpath="$(pwd -P)/${dest}"
+	else
+		dstpath="${dest}"
 	fi
 
-	if [ ! -d "$fullpath" ] && [ ! -e "$fullpath" ]; then
-		mkdir -p "$fullpath"
+	if [ ! -d "$dstpath" ] && [ ! -e "$dstpath" ]; then
+		mkdir -p "$dstpath"
 	fi
 
-	$yellow; echo "Extracting ${pkgfile} to ${fullpath}"; $normal
+	$yellow; echo "Extracting ${pkgfile} to ${dest}"; $normal
 
-	pushd "${fullpath}" &>/dev/null
-	if ! $xar -xf  "${pkgfile}"; then
+	pushd "${dstpath}" &>/dev/null
+	if ! $xar -xf  "${srcpath}"; then
 		popd &>/dev/null
 		$lred; echo "${pkgfile} extraction failed!"
 		return $result
@@ -1179,18 +1189,15 @@ function extract_pkg(){
 		echo
 		if [[ $REPLY =~ ^[Yy]$ ]] || [ "$pkg_keep_payloads" == "false" ];then
 			echo "Removing Packed Files..."
-			find . -type f -name "Payload" -delete
-			find . -type f -name "Scripts" -delete
-			find . -type f -name "PackageInfo" -delete
-			find . -type f -name "Bom" -delete
+			find ${dstpath} -type f -name "Payload" -delete
+			find ${dstpath} -type f -name "Scripts" -delete
+			find ${dstpath} -type f -name "PackageInfo" -delete
+			find ${dstpath} -type f -name "Bom" -delete
 		fi
 	fi
-	if [ -f "$dest/$(basename "$pkgfile")" ]; then #dummy mpkg in mpkg
-		rm "$dest/$(basename "$pkgfile")"
-	fi
 
-	chown -R "$SUDO_USER":"$SUDO_USER" "${fullpath}"
-	chmod -R 666 "${fullpath}"
+	chown -R "$SUDO_USER":"$SUDO_USER" "${dstpath}"
+	chmod -R 666 "${dstpath}"
 
 	return 0
 }
@@ -1403,6 +1410,43 @@ function main(){
 		err_exit ""
 	fi
 
+	file="$1"
+
+	name=$(basename "$1" 2>/dev/null) #input
+	extension=".${name##*.}"
+	filename="${name%.*}"
+
+	dname=$(basename "$2") #output
+	dextension=".${dname##*.}"
+	dfilename="${dname%.*}"
+
+	find_cmd "xar" "${scriptdir}/xar_bin/bin"
+	docheck_xar
+	find_cmd "dmg2img" "${scriptdir}/dmg2img_bin/usr/bin"
+	docheck_dmg2img
+	find_cmd "pbzx" "${scriptdir}"
+	docheck_pbzx
+
+	$green
+	echo "== External Dependencies =="
+	$white
+	echo "xar     => ${xar}"
+	echo "dmg2img => ${dmg2img}"
+	echo "pbzx    => ${pbzx}"
+	$normal
+	if [ ! -f "${xar}" ] || [ ! -f "${dmg2img}" ] || [ ! -f "${pbzx}" ]; then
+		err_exit "Invalid dependencies, cannot continue!\n"
+	fi
+
+	if [ "$extension" == ".pkg" ] || [ "$extension" == ".mpkg" ]; then #./install_osx.sh [file.pkg/mpkg]
+		if [ -z "$2" ]; then #no dest dir
+			usage
+			err_exit "Invalid Destination Folder\n"
+		fi
+		extract_pkg "$1" "$2"
+		err_exit ""
+	fi
+
 	kextdir="${scriptdir}/extra_kexts"
 	kerndir="${scriptdir}/kernels"
 	filepath="$( cd "$( dirname "$1" 2>/dev/null)" && pwd -P)"
@@ -1430,11 +1474,6 @@ function main(){
 
 	do_init_qemu
 
-	##File Details
-	#name --> filename.extension
-	#extension --> ".img", ".tar", ".dmg",..
-	#filename --> filename without extension
-	file="$1"
 	dev="$2"
 	size=$3 #for img creation
 
@@ -1447,32 +1486,6 @@ function main(){
 
 	if [ "$(id -u)" != "0" ]; then
 	   err_exit "This script must be run as root\n"
-	fi
-
-	name=$(basename "$1" 2>/dev/null) #input
-	extension=".${name##*.}"
-	filename="${name%.*}"
-
-	dname=$(basename "$2") #output
-	dextension=".${dname##*.}"
-	dfilename="${dname%.*}"
-
-	find_cmd "xar" "${scriptdir}/xar_bin/bin"
-	docheck_xar
-	find_cmd "dmg2img" "${scriptdir}/dmg2img_bin/usr/bin"
-	docheck_dmg2img
-	find_cmd "pbzx" "${scriptdir}"
-	docheck_pbzx
-
-	$green
-	echo "== External Dependencies =="
-	$white
-	echo "xar     => ${xar}"
-	echo "dmg2img => ${dmg2img}"
-	echo "pbzx    => ${pbzx}"
-	$normal
-	if [ ! -f "${xar}" ] || [ ! -f "${dmg2img}" ] || [ ! -f "${pbzx}" ]; then
-		err_exit "Invalid dependencies, cannot continue!\n"
 	fi
 
 	mkrecusb=0
@@ -1507,15 +1520,7 @@ function main(){
 		err_exit "No such device\n"
 	fi
 
-	if [ "$extension" == ".pkg" ] || [ "$extension" == ".mpkg" ]; then #./install_osx.sh [file.pkg/mpkg]
-		if [ -z "$2" ]; then #no dest dir
-			usage
-			err_exit "Invalid Destination Folder\n"
-		fi
-		extract_pkg "$file" "$2"
-		err_exit ""
-
-	elif [ ! "$extension" == ".dmg" ] && [ ! "$extension" == ".img" ]; then
+	if [ ! "$extension" == ".dmg" ] && [ ! "$extension" == ".img" ]; then
 			if [ "$1" == "--mkchameleon" ]; then
 				mkrecusb=1
 				bootloader="chameleon"
