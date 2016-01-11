@@ -22,14 +22,14 @@ int main(int argc, const char *argv[])
       fd = open (argv[1], O_RDONLY);
       if (fd < 0) {
         perror (argv[1]);
-        exit(5);
+        return 5;
       }
     }
 
     read (fd, header, 4);
     if (strncmp(header, "pbzx", 4)) {
       fprintf(stderr, "Can't find pbzx magic\n");
-      exit(0);
+      return 1;
     }
 
     // Now, if it IS a pbzx
