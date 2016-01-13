@@ -742,14 +742,16 @@ function docheck_chameleon(){
 }
 
 function docheck_mbr(){
-	if [ -d "$scriptdir/osinstall_mbr" ] && [ -f "$scriptdir/osinstall_mbr/OSInstall.mpkg" ] && [ -f "$scriptdir/osinstall_mbr/OSInstall" ]; then
-		check_mbrver
-		if [ "$dombr" == "1" ]; then
-			do_mbr
+	if [ -d "$scriptdir/osinstall_mbr" ] &&
+		[ -f "$scriptdir/osinstall_mbr/OSInstall.mpkg" ] &&
+		[ -f "$scriptdir/osinstall_mbr/OSInstall" ]
+		then
+			if check_mbrver; then
+				do_mbr
+			fi
+		else
+			$lred; echo "Mbr patch files missing!"; $normal
 		fi
-	else
-		$lred; echo "Mbr patch files missing!"; $normal
-	fi
 }
 
 function check_mbrver(){
@@ -773,9 +775,9 @@ function check_mbrver(){
 		$lyellow
 		printf "Original:\t$origbuild\nPatch:\t\t$patchbuild\n"
 		$normal
-		dombr=0
+		return 1
 	else
-		dombr=1
+		return 0
 	fi
 }
 
@@ -788,21 +790,16 @@ function do_remcache(){
 
 function do_kextperms(){
 	$lyellow; echo "Repairing Kext Permissions..."; $normal
-	if [ -d /mnt/osx/target/System/Library/Extensions/ ]; then
-		$yellow; echo "/System/Library/Extensions..."; $normal
-		find /mnt/osx/target/System/Library/Extensions/ -type d -name "*.kext" | while read kext; do
-			#echo "Fixing ... $kext"
-			chmod -R 755 "$kext"
-			chown -R 0:0 "$kext"
-		done
-	fi
-	if [ -d /mnt/osx/target/Extra/Extensions/ ]; then
-		$yellow; echo "/Extra/Extensions..."; $normal
-		find /mnt/osx/target/Extra/Extensions/ -type d -name "*.kext" | while read kext; do
-			chmod -R 755 "$kext"
-			chown -R 0:0 "$kext"
-		done
-	fi
+	for path in System/Library/Extensions Extra/Extensions; do
+		if [ -d /mnt/osx/target/${path} ]; then
+			$yellow; echo "/${path}..."; $normal
+			find "/mnt/osx/target/${path}" -type d -name "*.kext" -print0 | while read -r -d '' kext; do
+				#echo "Fixing ... $kext"
+				chmod -R 755 "$kext"
+				chown -R 0:0 "$kext"
+			done
+		fi
+	done
 	$lgreen; echo "Done"; $normal
 }
 
@@ -810,6 +807,31 @@ function do_mbr(){
 	$lyellow; echo "Patching Installer to support MBR"; $normal
 	cp $verbose "$scriptdir/osinstall_mbr/OSInstall.mpkg" "/mnt/osx/target/System/Installation/Packages/OSInstall.mpkg"
 	cp $verbose "$scriptdir/osinstall_mbr/OSInstall" "/mnt/osx/target/System/Library/PrivateFrameworks/Install.framework/Frameworks/OSInstall.framework/Versions/A/OSInstall"
+}
+
+function do_clover(){
+	local target_mbr
+	local target_pbr
+	if [ $virtualdev -eq 1 ]; then
+		target_mbr="/dev/nbd0"
+		target_pbr="${target_mbr}p1"
+	else
+		target_mbr="${dev}"
+		target_pbr="${dev}1"
+	fi
+
+	$lyellow; echo "Installing clover..."; $normal
+	if [ -f "${scriptdir}/clover/boot0ss" ]; then
+		$yellow; echo "Flashing Master boot record..."; $normal
+		dd if="${scriptdir}/clover/boot0ss" of="${target_mbr}"
+	fi
+	if [ -f "${scriptdir}/clover/boot1f32alt" ]; then
+		$yellow; echo "Flashing Partition boot record..."; $normal
+		dd if="${target_pbr}" count=1 bs=512 of="${scriptdir}/tmp/origbs"
+		cp $verbose "${scriptdir}/clover/boot1f32alt" "${scriptdir}/tmp/newbs"
+		dd if="${scriptdir}/tmp/origbs" of="${scriptdir}/tmp/newbs" skip=3 seek=3 bs=1 count=87 conv=notrunc
+		dd if="${scriptdir}/tmp/newbs" of="${target_pbr}" bs=512 count=1
+	fi
 }
 
 function do_chameleon(){
@@ -1320,7 +1342,7 @@ function set_from_config {
 
 function parseconfig(){
 	local setting="$1"
-	eval ${setting}=$(echo $confstream | grep -o $setting=.* | sed "s/$setting=//g;s/\ .*//g")
+	eval ${setting}=$(echo $confstream | grep -o ^$setting=.* | sed "s/$setting=//g;s/\ .*//g")
 }
 
 function check_config_vars {
