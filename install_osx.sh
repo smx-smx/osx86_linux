@@ -40,7 +40,9 @@ workdir=$(pwd -P)
 scriptdir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P)"
 cd $scriptdir
 
-source "${scriptdir}/inc/*.sh"
+for i in $scriptdir/inc/*.sh; do
+	source "$i"
+done
 
 function pause() {
 	if [ "$1" == "" ]; then
@@ -1359,6 +1361,9 @@ function main(){
 	docheck_dmg2img
 	find_cmd "pbzx" "${scriptdir}"
 	docheck_pbzx
+	find_cmd "kconfig_mconf" "${scriptdir}/kconfig_bin/bin"
+	docheck_kconfig
+
 
 	$green
 	echo "== External Dependencies =="

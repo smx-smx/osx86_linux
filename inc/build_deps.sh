@@ -1,16 +1,22 @@
+#!/bin/bash
+
 dmgimgversion="1.6.5"
 xarver="1.5.2"
+kconfigver="3.12.0.0"
+
+function docheck_kconfig(){
+	if [ -z "$kconfig_mconf" ]; then
+		compile_kconfig
+	fi
+}
+
+function compile_kconfig(){
+	:
+}
 
 function docheck_xar(){
 	if [ -z "$xar" ]; then
 		compile_xar
-		cd "$scriptdir"
-		cd "$dest"
-		$white; echo "Looking for compiled xar..."; $normal
-		find_cmd "xar" "${scriptdir}/xar_bin/bin"
-		if [ -z "$xar" ]; then
-			err_exit "Something wrong, xar command missing\n"
-		fi
 	else
 		local chkxar=$($xar --version 2>&1 | grep -q "libxar.so.1"; echo $?)
 		if [ $chkxar == 0 ]; then
@@ -18,8 +24,6 @@ function docheck_xar(){
 			rm -r xar_bin/*
 			$lyellow; echo "Recompiling xar..."; $normal
 			compile_xar
-			cd "$scriptdir"
-			cd "$dest"
 			local chkxar=$($xar -v 2>&1 | grep -q "libxar.so.1"; echo $?)
 			if [ $chkxar == 0 ]; then
 				err_exit "xar broken, cannot continue\n"
@@ -30,7 +34,6 @@ function docheck_xar(){
 
 function compile_xar(){
 	$lyellow; echo "Compiling xar..."; $normal
-	xarver="1.5.2"
 	if [ ! -f "xar-"$xarver".tar.gz" ]; then
 		wget "http://xar.googlecode.com/files/xar-"$xarver".tar.gz"
 		if [ ! -f "xar-"$xarver".tar.gz" ]; then
@@ -39,16 +42,22 @@ function compile_xar(){
 	fi
 	if [ -d "xar-"$xarver"" ]; then rm -r "xar-"$xarver""; fi
 		tar xvf "xar-"$xarver".tar.gz"
-		cd "xar-"$xarver""
+		pushd "xar-${xarver}" &>/dev/null
 		./configure --prefix="$scriptdir/xar_bin"
 		make
 		if [ ! $? == 0 ]; then
 			err_exit "Xar Build Failed\n"
 		fi
 		make install
+		popd &>/dev/null
 		chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver".tar.gz"
 		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver""
 		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar_bin"
+		xar="${scriptdir}/xar_bin/bin/xar"
+		if [ ! -f "$xar" ]; then
+			err_exit "Xar Build Failed\n"
+		fi
+
 }
 
 function docheck_pbzx(){
@@ -101,9 +110,12 @@ function compile_d2i(){
 		else
 			$lgreen; echo "Build completed!"; $normal
 		fi
-		DESTDIR="$scriptdir/dmg2img_bin" make install
-		chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion".tar.gz"
-		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion""
-		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img_bin"
+	DESTDIR="$scriptdir/dmg2img_bin" make install
+	chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion".tar.gz"
+	chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion""
+	chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img_bin"
 	dmg2img="$scriptdir/dmg2img_bin/usr/bin/dmg2img"
+	if [ ! -f "$dmg2img" ]; then
+		err_exit "dmg2img Build Failed\n"
+	fi
 }
