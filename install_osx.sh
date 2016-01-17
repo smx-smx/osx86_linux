@@ -906,21 +906,40 @@ function do_kernel(){
 	fi
 }
 
-function do_system(){
-	$lyellow; echo "Copying Base System to "$dev"..."; $normal
-	if [[ "$osver" =~ "10.6" ]]; then
-		#cp -pdR"$verbose" /mnt/osx/esd/* /mnt/osx/target/
-		rsync -arp $verbose --progress /mnt/osx/esd/* /mnt/osx/target/
-	else
-		#cp -pdR"$verbose" /mnt/osx/base/* /mnt/osx/target/
-		rsync -arp $verbose --progress /mnt/osx/base/* /mnt/osx/target/
+function trim(){
+	local text="$*"
+	echo -ne "${text//[$'\t\r\n']}"
+}
 
-		$lyellow; echo "Copying installation packages to "$dev"..." ; $normal
+function do_system(){
+	local rsync_flags=""
+	local rsync_source
+	if [ -f "/mnt/osx/esd/BaseSystem.dmg" ]; then
+		rsync_source="/mnt/osx/base/*"
+	else
+		rsync_source="/mnt/osx/esd"
+	fi
+	rsync_flags="-ar ${verbose} --info=progress2"
+	local rsync_size
+	$white; echo "Calculating Base System size..."; $normal
+	rsync_size=$(du -B1 -sc ${rsync_source}/* | tail -n1 | awk '{print $1}')
+	$lyellow; echo "Copying Base System to "$dev"..."; $normal
+	dialog --title "osx86_linux" --gauge "Copying base system..." 10 75 < <(
+		rsync ${rsync_flags} ${rsync_source}/* /mnt/osx/target/ | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
+			doneSz=$(trim $doneSz)
+			echo $((doneSz * 100 / rsync_size))
+		done
+	)
+
+	if [ -d "/mnt/osx/esd/Packages" ]; then
 		rm $verbose /mnt/osx/target/System/Installation/Packages
 		mkdir $verbose /mnt/osx/target/System/Installation/Packages
-		#cp -pdR"$verbose" /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
-		rsync -arp $verbose /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages
-		sync
+		dialog --title "osx86_linux" --gauge "Copying installation packages..." 10 75 < <(
+			rsync ${rsync_flags} /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
+				doneSz=$(trim $doneSz)
+				echo $((doneSz * 100 / rsync_size))
+			done
+		)
 	fi
 	sync
 }
@@ -1004,7 +1023,7 @@ function check_commands {
 		#add checks for other commands after the initial check
 	#	echo &>/dev/null
 	#else
-		commands=('grep' 'tput' 'dd' 'sed' 'parted' 'awk' 'mkfs.hfsplus' 'wget' 'dirname' 'basename' 'parted' 'pidof' 'gunzip' 'bunzip2' 'cpio')
+		commands=('dialog' 'grep' 'tput' 'dd' 'sed' 'parted' 'awk' 'mkfs.hfsplus' 'wget' 'dirname' 'basename' 'parted' 'pidof' 'gunzip' 'bunzip2' 'cpio')
 	#fi
 	for command in "${commands[@]}"; do
 		if ! check_command $command == 0; then
