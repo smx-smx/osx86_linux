@@ -1,5 +1,4 @@
 #!/bin/bash
-
 dmgimgversion="1.6.5"
 xarver="1.5.2"
 kconfigver="3.12.0.0"
