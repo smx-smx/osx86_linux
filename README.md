@@ -18,10 +18,22 @@ TODO:
 - Modularize more parts of the main script
 - Cleanup old code
 
-###Dependencies
-`apt-get install build-essential libbz2-dev libxml2-dev tput qemu-utils hfsprogs`
-
+### Dependencies
+`apt-get install build-essential libbz2-dev libxml2-dev tput qemu-utils hfsprogs dialog`
+##### dmg2img
 `apt-get build-dep dmg2img`
+##### kconfig
+`apt-get install gperf libncurses5-dev`
+
+For GTK Configuration support
+
+`apt-get install libgtk2.0-dev libglade2-dev`
+
+For QT Configuration support
+
+`apt-get install libqt4-dev`
+
+---------------------------
 
 For Virtual HD support:
 
