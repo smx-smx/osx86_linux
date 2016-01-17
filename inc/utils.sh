@@ -4,6 +4,10 @@ function trim(){
 	echo -ne "${text//[$'\t\r\n']}"
 }
 
+function negate(){
+	[[ $1 -gt 0 ]] && return 0 || return 1;
+}
+
 function pause() {
 	if [ "$1" == "" ]; then
 		$white; read -p "Press [enter] to continue"; $normal
