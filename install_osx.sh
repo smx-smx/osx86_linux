@@ -23,7 +23,6 @@ if [ $rev -gt 0 ]; then
 else
 	program_revision="git"
 fi
-#configfile="config.cfg"
 
 if [ -z $really_verbose ]; then
 	really_verbose=0
@@ -988,47 +987,6 @@ function cleanup() {
 	return $result
 }
 
-#read config.cfg
-function set_from_config {
-	local confstream=$(cat config.cfg | sed '/#/d;/\//d;/^$/d')
-	for setting in 'bootloader' 'partitiontable' 'patchmbr' 'chameleonmbr' 'pkg_keep_payloads' 'keep_imgfiles' 'compile_dmg2img' 'compile_xar' 'img2vdi' 'keep_diskimg'; do
-		parseconfig "$setting"
-	done
-
-	}
-
-function parseconfig(){
-	local setting="$1"
-	eval ${setting}=$(echo $confstream | grep -o ^$setting=.* | sed "s/$setting=//g;s/\ .*//g")
-}
-
-function check_config_vars {
-	boolvars=('patchmbr' 'chameleonmbr' 'pkg_keep_payloads' 'keep_imgfiles' 'compile_dmg2img' 'compile_xar' 'img2vdi' 'keep_diskimg')
-	for var in "${boolvars[@]}"; do
-	if [ $really_verbose == 1 ]; then echo "var: ${var} - val: ${!var}"; fi
-		#if [ -z ${!var} ]; then
-		#	$lred; echo "ERROR! Bad Config File.		$var is not defined"; $normal
-		#	cleanup
-		#	exit
-		#el
-		if [ ${!var} != "false" ] && [ ${!var} != "true" ]; then
-			$lred; echo "ERROR! Bad Config File.		$var can only be true or false		current value is ${!var}"; $normal
-			cleanup
-			exit 1
-		fi
-	done
-
-	strvars=('bootloader' 'partitiontable')
-	for var in "${strvars[@]}"; do
-	if [ $really_verbose == 1 ]; then echo "var: ${var} - val: ${!var}"; fi
-		#if [ -z "${!var}" ]; then
-		#	$lred; echo "ERROR! Bad Config File.		${var} is not defined"; $normal
-		#	cleanup
-		#	exit
-		#fi
-	done
-}
-
 function usage(){
 	echo "Osx Installer/Utilities for Linux by SMX"
 	printf "$0 [dmgfile] [dev]\t\tConverts and install a dmg to a device\n"
@@ -1226,14 +1184,6 @@ function main(){
 			[ "$dextension" == ".vmdk" ]
 		then
 			vdev_check "$2" #switch to Virtual HDD mode & check
-		fi
-	fi
-
-	# This isn't implemented yet
-	if false; then
-		if [ -e $configfile ]; then
-			set_from_config		#read config file
-			check_config_vars	#check if config is valid
 		fi
 	fi
 
