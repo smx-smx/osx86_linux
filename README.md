@@ -1,47 +1,50 @@
-osx86_linux
-==============
+#osx86_linux
 
-osx86 media for Linux
-Aimed at people who want to try OS X, but don't have a real MAC to 
-prepare the usb installer, or have a CPU that doesn't support 
-Virtualization
+osx86_linux is a script aimed at people who want to try OS X (hackintosh, but also vanilla pendrive preparation will be possible in the future), but don't have a real MAC to prepare the usb installer, or have a CPU that doesn't support 
+virtualization.
 
-This script creates an osx86 install media starting from a dmg file.
+This script creates an osx86 installer starting from a dmg file (InstallESD or Install DVD).
 
-TODO: Beautify the code. Remove ugly parts
+Should work with OS X Snow leopard (10.6) and above
+ 
+TODO:
+- GPT support
+- UEFI support
+- Clover support
+- Vanilla installer support (via boot.efi)
+- Some form of dialog / UI
+- Config file
+- Use FUSE to access the DMG directly instead of dmg2img
+- Modularize more parts of the main script
+- Cleanup old code
 
-Should work with:
- OSX 10.6, 10.7, 10.8, 10.9
+###Dependencies
+`apt-get install build-essential libbz2-dev libxml2-dev tput qemu-utils hfsprogs`
 
-Files list
-"chameleon" directory
---------------
-- boot
-- boot0
-- boot1h
+`apt-get build-dep dmg2img`
 
-"extra_kexts" directory
---------------
-- FakeSMC.kext
-- <any other kext> (NullCPUPowerManagement, ps2 controller, ...)
+For Virtual HD support:
 
-"osinstall_mbr" directory (optional fpr MBR patch)"
---------------
-- OSInstall
-- OSInstall.mpkg
+`apt-get install virtualbox`
 
-smbios.plist in script directory (for Lion/Mountain Lion/Maverics)
+For chameleon support:
+- chameleon/boot
+- chameleon/boot0
+- chameleon/boot1h
+
+For additional kexts:
+- extra_kexts/FakeSMC.kext
+- \<any other kext\> (NullCPUPowerManagement, ps2 controller, ...)
+
+For MBR Patch:
+- osinstall_mbr/OSInstall
+- osinstall_mbr/OSInstall.mpkg
+
+Custom SMBios:
+
+Place smbios.plist in script directory
 
 see ./install_osx.sh -h for usage
 
-This script requires:
--cpio
--udisks
--nbd
-
-This script uses:
- dmg2img (version 1.6.5 strongly recommended)
- qemu-nbd
- mkfs.hfsplus
 
 I AM NOT RESPONSIBLE FOR ANY DAMAGE THE USE OF THIS SCRIPT MAY CAUSE.
