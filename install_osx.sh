@@ -990,6 +990,8 @@ function main(){
 		exit 0
 	fi
 
+	load_config
+
 	kextdir="${scriptdir}/extra_kexts"
 	kerndir="${scriptdir}/kernels"
 	filepath="$( cd "$( dirname "$1" 2>/dev/null)" && pwd -P)"

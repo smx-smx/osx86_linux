@@ -1,0 +1,55 @@
+mainmenu "osx86_linux Configuration"
+  choice
+    prompt "Target Platform"
+    default PLAT_BIOS
+    ---help---
+      Select the target environment
+
+    config PLAT_BIOS
+      bool "Legacy BIOS"
+      ---help---
+        Select this option to target the Legacy BIOS
+        The MBR/PBR will be written to the disk
+
+    config PLAT_UEFI
+      bool "UEFI BIOS"
+      ---help---
+        Select this option to target the UEFI BIOS
+        The boot files will be copied to the ESP on the target media
+  endchoice
+
+  choice
+    prompt "Target Partition Scheme"
+    default PART_MBR if PLAT_BIOS
+    ---help---
+      Select the desired Partitioning Scheme/Layout for the target media
+
+    config PART_MBR
+      bool "MBR Scheme"
+      ---help---
+        The Master Boot Record partition layout. Needed for legacy platforms.
+        If you plan to install OS X on a MBR Partition you'll need the MBR patch aswell
+
+    config PART_GPT
+      bool "GPT Scheme"
+      ---help---
+        The GPT partition layout. Recommended when possible as it's the default scheme used in OS X
+  endchoice
+
+  choice
+    prompt "Target Bootloader"
+    default BOOT_CHAMELEON
+    ---help---
+      Select the desired bootloader to be used on the target media
+
+    config BOOT_CHAMELEON
+      bool "Chameleon Boot Loader"
+      ---help---
+        The Chameleon boot132 based bootloader. Recommended for legacy platforms
+
+    config BOOT_CLOVER
+      bool "Clover Boot Loader"
+      ---help---
+        The Clover Duet based bootloader. Recommended for UEFI platforms
+
+  endchoice
