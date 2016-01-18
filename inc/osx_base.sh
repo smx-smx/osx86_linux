@@ -57,9 +57,9 @@ function do_system(){
 	local rsync_flags=""
 	local rsync_source
 	if [ -f "/mnt/osx/esd/BaseSystem.dmg" ]; then
-		rsync_source="/mnt/osx/base/*"
+		rsync_source="/mnt/osx/base/"
 	else
-		rsync_source="/mnt/osx/esd"
+		rsync_source="/mnt/osx/esd/"
 	fi
 	rsync_flags="-ar ${verbose} --info=progress2"
 	local rsync_size
@@ -67,17 +67,21 @@ function do_system(){
 	rsync_size=$(du -B1 -sc ${rsync_source}/* | tail -n1 | awk '{print $1}')
 	$lyellow; echo "Copying Base System to "$dev"..."; $normal
 	dialog --title "osx86_linux" --gauge "Copying base system..." 10 75 < <(
-		rsync ${rsync_flags} ${rsync_source}/* /mnt/osx/target/ | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
+		rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/ | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
 			doneSz=$(trim $doneSz)
 			echo $((doneSz * 100 / rsync_size))
 		done
 	)
 
+	rsync_source="/mnt/osx/esd/Packages/"
+	$white; echo "Calculating Installation Packages size..."; $normal
+	rsync_size=$(du -B1 -sc ${rsync_source}/* | tail -n1 | awk '{print $1}')
+
 	if [ -d "/mnt/osx/esd/Packages" ]; then
 		rm $verbose /mnt/osx/target/System/Installation/Packages
 		mkdir $verbose /mnt/osx/target/System/Installation/Packages
 		dialog --title "osx86_linux" --gauge "Copying installation packages..." 10 75 < <(
-			rsync ${rsync_flags} /mnt/osx/esd/Packages/* /mnt/osx/target/System/Installation/Packages | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
+			rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/System/Installation/Packages/ | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
 				doneSz=$(trim $doneSz)
 				echo $((doneSz * 100 / rsync_size))
 			done
