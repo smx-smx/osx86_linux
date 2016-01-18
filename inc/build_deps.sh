@@ -29,9 +29,9 @@ function compile_kconfig(){
 			err_exit "Kconfig Install Failed\n"
 		fi
 		popd &>/dev/null
-		chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver".tar.gz"
-		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver""
-		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar_bin"
+		chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/kconfig-frontends-${kconfigver}.tar.xz"
+		chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/kconfig-frontends-${kconfigver}"
+		chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/kconfig_bin"
 		kconfig_mconf="${scriptdir}/kconfig_bin/bin/kconfig_mconf"
 		if [ ! -f "$xar" ]; then
 			err_exit "KConfig Build Failed\n"
@@ -76,9 +76,9 @@ function compile_xar(){
 			err_exit "Xar Install Failed\n"
 		fi
 		popd &>/dev/null
-		chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver".tar.gz"
-		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver""
-		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar_bin"
+		chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/xar-${xarver}.tar.gz"
+		chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/xar-${xarver}"
+		chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/xar_bin"
 		xar="${scriptdir}/xar_bin/bin/xar"
 		if [ ! -f "$xar" ]; then
 			err_exit "Xar Build Failed\n"
@@ -138,9 +138,9 @@ function compile_d2i(){
 	if ! DESTDIR="$scriptdir/dmg2img_bin" make install; then
 		err_exit "dmg2img Install Failed\n"
 	fi
-	chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion".tar.gz"
-	chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion""
-	chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img_bin"
+	chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/dmg2img-${dmgimgversion}.tar.gz"
+	chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/dmg2img-${dmgimgversion}"
+	chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/dmg2img_bin"
 	dmg2img="$scriptdir/dmg2img_bin/usr/bin/dmg2img"
 	if [ ! -f "$dmg2img" ]; then
 		err_exit "dmg2img Build Failed\n"
