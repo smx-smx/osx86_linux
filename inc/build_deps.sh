@@ -4,13 +4,38 @@ xarver="1.5.2"
 kconfigver="3.12.0.0"
 
 function docheck_kconfig(){
-	if [ -z "$kconfig_mconf" ]; then
+	if [ -z "${kconfig_mconf}" ]; then
 		compile_kconfig
 	fi
 }
 
 function compile_kconfig(){
-	:
+	$lyellow; echo "Compiling kconfig..."; $normal
+	if [ ! -f "kconfig-frontends-${kconfigver}.tar.xz" ]; then
+		if ! wget "http://ymorin.is-a-geek.org/download/kconfig-frontends/kconfig-frontends-${kconfigver}.tar.xz"; then
+			err_exit "Download failed\n"
+		fi
+	fi
+	if [ -d "kconfig-frontends-${kconfigver}" ]; then rm -r "kconfig-frontends-${kconfigver}"; fi
+		if ! tar xvf "kconfig-frontends-${kconfigver}.tar.xz"; then
+			err_exit "Extraction failed\n"
+		fi
+		pushd "kconfig-frontends-${kconfigver}" &>/dev/null
+		./configure --prefix="$scriptdir/kconfig_bin"
+		if ! make; then
+			err_exit "Kconfig Build Failed\n"
+		fi
+		if ! make install; then
+			err_exit "Kconfig Install Failed\n"
+		fi
+		popd &>/dev/null
+		chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver".tar.gz"
+		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver""
+		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar_bin"
+		kconfig_mconf="${scriptdir}/kconfig_bin/bin/kconfig_mconf"
+		if [ ! -f "$xar" ]; then
+			err_exit "KConfig Build Failed\n"
+		fi
 }
 
 function docheck_xar(){
@@ -34,20 +59,22 @@ function docheck_xar(){
 function compile_xar(){
 	$lyellow; echo "Compiling xar..."; $normal
 	if [ ! -f "xar-"$xarver".tar.gz" ]; then
-		wget "http://xar.googlecode.com/files/xar-"$xarver".tar.gz"
-		if [ ! -f "xar-"$xarver".tar.gz" ]; then
+		if ! wget "http://xar.googlecode.com/files/xar-"$xarver".tar.gz"; then
 			err_exit "Download failed\n"
 		fi
 	fi
 	if [ -d "xar-"$xarver"" ]; then rm -r "xar-"$xarver""; fi
-		tar xvf "xar-"$xarver".tar.gz"
+		if ! tar xvf "xar-"$xarver".tar.gz"; then
+			err_exit "Extraction failed\n"
+		fi
 		pushd "xar-${xarver}" &>/dev/null
 		./configure --prefix="$scriptdir/xar_bin"
-		make
-		if [ ! $? == 0 ]; then
+		if ! make; then
 			err_exit "Xar Build Failed\n"
 		fi
-		make install
+		if ! make install; then
+			err_exit "Xar Install Failed\n"
+		fi
 		popd &>/dev/null
 		chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver".tar.gz"
 		chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/xar-"$xarver""
@@ -62,8 +89,7 @@ function compile_xar(){
 function docheck_pbzx(){
 	if [ -z "$pbzx" ]; then
 		$lyellow; echo "Compiling pbzx..."; $normal
-		gcc -Wall -pedantic "${scriptdir}/pbzx.c" -o "${scriptdir}/pbzx"
-		if [ ! $? -eq 0 ]; then
+		if ! gcc -Wall -pedantic "${scriptdir}/pbzx.c" -o "${scriptdir}/pbzx"; then
 			err_exit "pbzx Build Failed\n"
 		fi
 		pbzx="${scriptdir}/pbzx"
@@ -92,24 +118,26 @@ function docheck_dmg2img(){
 
 function compile_d2i(){
 	if [ ! -f "dmg2img-"$dmgimgversion".tar.gz" ]; then
-		wget "http://vu1tur.eu.org/tools/dmg2img-"$dmgimgversion".tar.gz"
-		if [ ! -f "dmg2img-"$dmgimgversion".tar.gz" ]; then
+		if ! wget "http://vu1tur.eu.org/tools/dmg2img-"$dmgimgversion".tar.gz"; then
 			err_exit "Download failed\n"
 		fi
 	fi
-	if [ ! -d "dmg2img-"$dmgimgversion"" ]; then rm -r "dmg2img-"$dmgimgversion""; fi
-		tar xvf "dmg2img-"$dmgimgversion".tar.gz"
-		cd "dmg2img-"$dmgimgversion""
-		make
-		if [ ! $? == 0 ]; then
-			$lred; echo "dmg2img Build Failed"; $normal
-			$lyellow; echo -e "Make sure you have installed the necessary build deps\nOn debian/ubuntu"; $normal
-			$white; echo "sudo apt-get build-dep dmg2img"; $normal
-			err_exit ""
-		else
-			$lgreen; echo "Build completed!"; $normal
-		fi
-	DESTDIR="$scriptdir/dmg2img_bin" make install
+	if [ ! -d "dmg2img-"$dmgimgversion"" ]; then
+		rm -r "dmg2img-"$dmgimgversion""
+	fi
+	if ! tar xvf "dmg2img-"$dmgimgversion".tar.gz"; then
+		err_exit "Extraction failed\n"
+	fi
+	pushd "dmg2img-${dmgimgversion}" &>/dev/null
+	if ! make; then
+		$lred; echo "dmg2img Build Failed"; $normal
+		$lyellow; echo -e "Make sure you have installed the necessary build deps\nOn debian/ubuntu"; $normal
+		$white; echo "sudo apt-get build-dep dmg2img"; $normal
+		err_exit ""
+	fi
+	if ! DESTDIR="$scriptdir/dmg2img_bin" make install; then
+		err_exit "dmg2img Install Failed\n"
+	fi
 	chown "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion".tar.gz"
 	chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img-"$dmgimgversion""
 	chown -R "$SUDO_USER":"$SUDO_USER" "$scriptdir/dmg2img_bin"

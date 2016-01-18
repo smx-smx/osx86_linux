@@ -785,22 +785,26 @@ function check_commands {
 
 function find_cmd {
 	# Command to look for
-	cmd=$1
+	cmdvar=$1
 	# Preferred search dir
 	cmd_dir=$2
+	# Full command name (optional)
+	cmd=$3
 
 	local cmd_path
-	if [ ! -z "$cmd_dir" ]; then
+	if [ ! -z "${cmd}" ]; then
 		cmd_path="${cmd_dir}/${cmd}"
+	elif [ ! -z "${cmd_dir}" ]; then
+		cmd_path="${cmd_dir}/${cmdvar}"
 	else
-		cmd_path="$(type -P "${cmd}")"
+		cmd_path="$(type -P "${cmdvar}")"
 	fi
 
 	# Store the command path in the command-named variable (ex xar -> $xar)
 	if [ -e "${cmd_path}" ]; then
-		eval ${cmd}=${cmd_path}
+		eval ${cmdvar}=${cmd_path}
 	else
-		unset ${cmd}
+		unset ${cmdvar}
 	fi
 
 	#echo "Arg   --> $cmd"
@@ -956,18 +960,23 @@ function main(){
 	docheck_dmg2img
 	find_cmd "pbzx" "${scriptdir}"
 	docheck_pbzx
-	find_cmd "kconfig_mconf" "${scriptdir}/kconfig_bin/bin"
+	find_cmd "kconfig_mconf" "${scriptdir}/kconfig_bin/bin" "kconfig-mconf"
 	docheck_kconfig
 
 
 	$green
 	echo "== External Dependencies =="
 	$white
-	echo "xar     => ${xar}"
-	echo "dmg2img => ${dmg2img}"
-	echo "pbzx    => ${pbzx}"
+	echo "xar           => ${xar}"
+	echo "dmg2img       => ${dmg2img}"
+	echo "pbzx          => ${pbzx}"
+	echo "kconfig-mconf => ${kconfig_mconf}"
 	$normal
-	if [ ! -f "${xar}" ] || [ ! -f "${dmg2img}" ] || [ ! -f "${pbzx}" ]; then
+	if [ ! -f "${xar}" ] ||
+	[ ! -f "${dmg2img}" ] ||
+	[ ! -f "${pbzx}" ] ||
+	[ ! -f "${kconfig_mconf}" ]
+	then
 		err_exit "Invalid dependencies, cannot continue!\n"
 	fi
 
