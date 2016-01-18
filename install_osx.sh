@@ -1,22 +1,4 @@
 #!/bin/bash
-export normal='tput sgr0'
-export bold='setterm -bold'
-
-export red='printf \033[00;31m'
-export green='printf \033[00;32m'
-export yellow='printf \033[00;33m'
-export blue='printf \033[00;34m'
-export purple='printf \033[00;35m'
-export cyan='printf \033[00;36m'
-export lightgray='printf \033[00;37m'
-export lred='printf \033[01;31m'
-export lgreen='printf \033[01;32m'
-export lyellow='printf \033[01;33m'
-export lblue='printf \033[01;34m'
-export lpurple='printf \033[01;35m'
-export lcyan='printf \033[01;36m'
-export white='printf \033[01;37m'
-
 rev=$(git log --pretty=oneline 2>/dev/null | wc -l)
 if [ $rev -gt 0 ]; then
 	program_revision="git r$rev"
@@ -26,13 +8,12 @@ fi
 
 if [ -z $really_verbose ]; then
 	really_verbose=0
-fi
-
-if [ $really_verbose == 1 ]; then
+elif [ $really_verbose -eq 1 ]; then
 	verbose="-v"
 else
 	verbose=""
 fi
+
 trap err_exit SIGINT
 
 workdir=$(pwd -P)
@@ -930,7 +911,7 @@ function main(){
 	mediamenu=0
 
 	if [ -z $SUDO_USER ]; then
-		SUDO_USER="root"
+		export SUDO_USER="root"
 	fi
 
 	if [ $# == 0 ] ||
