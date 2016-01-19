@@ -887,11 +887,6 @@ function usage(){
 }
 
 function main(){
-	if [ "$1" == "guictl" ]; then
-		"$2" "${*:2}"
-		return 0
-	fi
-
 	$lgreen; printf "OSX Install Media Maker by "
 	$lyellow; printf "S"
 	$lblue; printf "M"
@@ -935,31 +930,44 @@ function main(){
 	dextension=".${dname##*.}"
 	dfilename="${dname%.*}"
 
-	find_cmd "xar" "${scriptdir}/bins/bin"
-	docheck_xar
-	find_cmd "dmg2img" "${scriptdir}/bins/bin"
-	docheck_dmg2img
-	find_cmd "pbzx" "${scriptdir}"
-	docheck_pbzx
-	find_cmd "kconfig_mconf" "${scriptdir}/bins/bin" "kconfig-mconf"
-	docheck_kconfig
-	find_cmd "mount_hfs" "${scriptdir}/bins/bin" "darling-dmg"
-	docheck_darlingdmg
+	load_config
+
+	if is_on DEP_XAR; then
+		find_cmd "xar" "${scriptdir}/bins/bin"
+		docheck_xar
+	fi
+	if is_on DEP_DMG2IMG; then
+		find_cmd "dmg2img" "${scriptdir}/bins/bin"
+		docheck_dmg2img
+	fi
+	if is_on DEP_PBZX; then
+		find_cmd "pbzx" "${scriptdir}"
+		docheck_pbzx
+	fi
+	if is_on DEP_KCONFIG; then
+		find_cmd "kconfig_mconf" "${scriptdir}/bins/bin" "kconfig-mconf"
+		docheck_kconfig
+	fi
+	if is_on DEP_DARLING_DMG; then
+		find_cmd "mount_hfs" "${scriptdir}/bins/bin" "darling-dmg"
+		docheck_darlingdmg
+	fi
 
 
 	$green
 	echo "== External Dependencies =="
 	$white
-	echo "xar           => ${xar}"
-	echo "dmg2img       => ${dmg2img}"
-	echo "pbzx          => ${pbzx}"
-	echo "kconfig-mconf => ${kconfig_mconf}"
-	echo "mount_hfs     => ${mount_hfs}"
+	is_on DEP_XAR         && echo "xar           => ${xar}"
+	is_on DEP_DMG2IMG     && echo "dmg2img       => ${dmg2img}"
+	is_on DEP_PBZX        && echo "pbzx          => ${pbzx}"
+	is_on DEP_KCONFIG     && echo "kconfig-mconf => ${kconfig_mconf}"
+	is_on DEP_DARLING_DMG && echo "mount_hfs     => ${mount_hfs}"
 	$normal
-	if [ ! -f "${xar}" ] ||
-	[ ! -f "${dmg2img}" ] ||
-	[ ! -f "${pbzx}" ] ||
-	[ ! -f "${kconfig_mconf}" ]
+	if (is_on DEP_XAR && [ ! -f "${xar}" ]) ||
+		(is_on DEP_DMG2IMG && [ ! -f "${dmg2img}" ]) ||
+		(is_on DEP_PBZX && [ ! -f "${pbzx}" ]) ||
+		(is_on DEP_KCONFIG && [ ! -f "${kconfig_mconf}" ]) ||
+		(is_on DEP_DARLING_DMG && [ ! -f "${mount_hfs}" ])
 	then
 		err_exit "Invalid dependencies, cannot continue!\n"
 	fi
@@ -973,8 +981,6 @@ function main(){
 		cleanup
 		exit 0
 	fi
-
-	load_config
 
 	kextdir="${scriptdir}/extra_kexts"
 	kerndir="${scriptdir}/kernels"
@@ -1107,22 +1113,22 @@ function main(){
 		err_exit ""
 	fi
 
-	outfile=""$filepath/$filename".img"
-	if [ ! -e "$outfile" ]; then
-		echo "Converting "$file" to img..."
-		$dmg2img "$file" "$outfile"
-	#check_err=$(cat /tmp/dmg2img.log | grep -q "ERROR:"; echo $?)
-	#if [ ! $? == 0 ] || [ ! -f "$outfile" ] || [ $check_err == 0 ]; then
-	if [ ! $? == 0 ] || [ ! -f "$outfile" ]; then
-		rm "$outfile"
-		err_exit "Img conversion failed\n"
-	fi
-	unset check_err
+	if is_on DEP_DMG2IMG; then
+		outfile="${filepath}/${filename}.img"
+		if [ ! -e "${outfile}" ]; then
+			echo "Converting ${file} to img..."
+			$dmg2img "${file}" "${outfile}"
+			if [ ! $? == 0 ] || [ ! -f "${outfile}" ]; then
+				rm "$outfile"
+				err_exit "Img conversion failed\n"
+			fi
+			unset check_err
+		fi
 	fi
 
 	$lyellow; echo "Mapping image with qemu..."; $normal
 	if [ ! $nbd1_mapped == 1 ]; then
-		if ! qemu_map "nbd1" "$outfile"; then
+		if ! qemu_map "nbd1" "${outfile}"; then
 			err_exit "Error during image mapping\n"
 		fi
 	fi
@@ -1135,12 +1141,14 @@ function main(){
 	fi
 
 	if [ -f "/mnt/osx/esd/BaseSystem.dmg" ]; then
-		outfile="${filepath}/BaseSystem.img"
-		if [ ! -e "$outfile" ]; then
-			echo "Converting BaseSystem.dmg..."
-			$dmg2img "/mnt/osx/esd/BaseSystem.dmg" "$outfile"
-			if [ ! $? == 0 ] || [ ! -f "$outfile" ]; then
-				err_exit "Img conversion failed\n"
+		if is_on DEP_DMG2IMG; then
+			outfile="${filepath}/BaseSystem.img"
+			if [ ! -e "$outfile" ]; then
+				echo "Converting BaseSystem.dmg..."
+				$dmg2img "/mnt/osx/esd/BaseSystem.dmg" "$outfile"
+				if [ ! $? == 0 ] || [ ! -f "$outfile" ]; then
+					err_exit "Img conversion failed\n"
+				fi
 			fi
 		fi
 

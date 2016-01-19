@@ -9,3 +9,9 @@ function load_config(){
   fi
   eval $(cat "${scriptdir}/.config" | grep -v "^#")
 }
+
+function is_on(){
+  local option="CONFIG_$1"
+  [ "${!option}" == "y" ] && return 0 #0 -> success (it's on)
+  return 1 #1 -> failure (it's not on)
+}

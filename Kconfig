@@ -1,4 +1,58 @@
 mainmenu "osx86_linux Configuration"
+  config OPT_REQUIRED
+    bool
+    default y
+    select DEP_KCONFIG
+
+  menu "Advanced Options"
+    menu "Build dependencies"
+      config DEP_DMG2IMG
+        bool "dmg2img"
+      config DEP_PBZX
+        bool "pbzx"
+      config DEP_KCONFIG
+        bool "kconfig"
+      config DEP_XAR
+        bool "xar"
+      config DEP_DARLING_DMG
+        bool "darling-dmg"
+    endmenu
+
+    menu "Optional OS X Support"
+      config OSX_DO_XAR
+        select DEP_XAR
+        bool "OS X 10.9 Support"
+        default y
+
+      config OSX_DO_PBZX
+        select DEP_PBZX
+        bool "OS X 10.10+ Support"
+        default y
+    endmenu
+
+
+    choice
+      prompt "Source HFS+ Driver"
+      default DRV_DARLING
+      ---help---
+        Select the HFS+ Driver to use for the source image/filesystem
+
+      config DRV_DARLING
+        bool "darling-dmg"
+        select DEP_DARLING_DMG
+        ---help---
+          The darling-dmg driver supports DMG files directly without dmg2img.
+          It also supports Korean filenames correctly (avoids warnings on Korean font bundles)
+
+      config DRV_HFSPLUS
+        bool "hfsplus"
+        select DEP_DMG2IMG
+        ---help---
+          The hfsplus driver comes from the Linux kernel.
+          It doesn't support dmg files directly (requires dmg2img beforehand) and has a bug when handling Korean filenames (https://bugzilla.kernel.org/show_bug.cgi?id=15453)
+    endchoice
+  endmenu
+
   choice
     prompt "Target Platform"
     default PLAT_BIOS
