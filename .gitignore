@@ -1,0 +1,5 @@
+# Kconfig artifacts
+.config
+# Logs + ansi2html logs
+*.log
+*.html
