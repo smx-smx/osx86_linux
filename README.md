@@ -33,6 +33,9 @@ For QT Configuration support
 
 `apt-get install libqt4-dev`
 
+##### darling-dmg
+`apt-get install cmake libfuse-dev libssl-dev libicu-dev zlib1g-dev libbz2-dev`
+
 ---------------------------
 
 For Virtual HD support:
