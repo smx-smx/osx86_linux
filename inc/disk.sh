@@ -73,7 +73,7 @@ function mount_part(){
 		if touch /mnt/osx/target/check_ro; then
 			rm /mnt/osx/target/check_ro
 		else
-			$lyellow; echo "Restoring volume..."; $normal
+			$lyellow; echo "Recovering volume..."; $normal
 			umount /mnt/osx/target
 			if [ $virtualdev == 1 ]; then
 				fsck.hfsplus -f -y /dev/nbd0p1 || err_exit "fsck failed!\n"

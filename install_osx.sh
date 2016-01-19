@@ -392,8 +392,8 @@ function vdev_check(){
 	#else
 	#	err_exit "Unknown Error!\n"
 	fi
-	if [ "$size" == "" ] || [ "$size" == " " ] || [ -z $size ]; then
-		if [ $mkrecusb == 1 ]; then
+	if [ -z $size ]; then
+		if [ $mkrecusb -eq 1 ]; then
 			size=$((400 * 1024 * 1024)) #400
 		else
 			size=$((10 * 1024 * 1024 * 1024)) #10gb
@@ -935,14 +935,16 @@ function main(){
 	dextension=".${dname##*.}"
 	dfilename="${dname%.*}"
 
-	find_cmd "xar" "${scriptdir}/xar_bin/bin"
+	find_cmd "xar" "${scriptdir}/bins/bin"
 	docheck_xar
-	find_cmd "dmg2img" "${scriptdir}/dmg2img_bin/usr/bin"
+	find_cmd "dmg2img" "${scriptdir}/bins/bin"
 	docheck_dmg2img
 	find_cmd "pbzx" "${scriptdir}"
 	docheck_pbzx
-	find_cmd "kconfig_mconf" "${scriptdir}/kconfig_bin/bin" "kconfig-mconf"
+	find_cmd "kconfig_mconf" "${scriptdir}/bins/bin" "kconfig-mconf"
 	docheck_kconfig
+	find_cmd "mount_hfs" "${scriptdir}/bins/bin" "darling-dmg"
+	docheck_darlingdmg
 
 
 	$green
@@ -952,6 +954,7 @@ function main(){
 	echo "dmg2img       => ${dmg2img}"
 	echo "pbzx          => ${pbzx}"
 	echo "kconfig-mconf => ${kconfig_mconf}"
+	echo "mount_hfs     => ${mount_hfs}"
 	$normal
 	if [ ! -f "${xar}" ] ||
 	[ ! -f "${dmg2img}" ] ||

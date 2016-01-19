@@ -2,6 +2,44 @@
 dmgimgversion="1.6.5"
 xarver="1.5.2"
 kconfigver="3.12.0.0"
+darling_dmgver="1.0.3"
+
+function docheck_darlingdmg(){
+	if [ -z "${mount_hfs}" ]; then
+		compile_darlingdmg
+	fi
+}
+
+function compile_darlingdmg(){
+	$lyellow; echo "Compiling darling-dmg..."; $normal
+	if [ ! -f "darling-dmg-${darling_dmgver}.tar.gz" ]; then
+		if ! wget "https://github.com/darlinghq/darling-dmg/archive/v${darling_dmgver}.tar.gz" -O "darling-dmg-${darling_dmgver}.tar.gz"; then
+			err_exit "Download failed\n"
+		fi
+	fi
+	if [ -d "darling-dmg-${darling_dmgver}" ]; then rm -r "darling-dmg-${darling_dmgver}"; fi
+		if ! tar xvf "darling-dmg-${darling_dmgver}.tar.gz"; then
+			err_exit "Extraction failed\n"
+		fi
+		mkdir "darling-dmg-${darling_dmgver}/build"
+		pushd "darling-dmg-${darling_dmgver}/build" &>/dev/null
+		if ! cmake cmake -DCMAKE_INSTALL_PREFIX:PATH="${scriptdir}/bins" ..; then
+			err_exit "Configuration Failed!\n"
+		fi
+		if ! make; then
+			err_exit "darling-dmg Build Failed\n"
+		fi
+		if ! make install; then
+			err_exit "darling-dmg Install Failed\n"
+		fi
+		popd &>/dev/null
+		chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/darling-dmg-${darling_dmgver}.tar.gz"
+		chown -R "$SUDO_USER":"$SUDO_USER" "darling-dmg-${darling_dmgver}"
+		mount_hfs="${scriptdir}/bins/bin/darling-dmg"
+		if [ ! -f "$mount_hfs" ]; then
+			err_exit "darling-dmg Build Failed\n"
+		fi
+}
 
 function docheck_kconfig(){
 	if [ -z "${kconfig_mconf}" ]; then
@@ -21,7 +59,7 @@ function compile_kconfig(){
 			err_exit "Extraction failed\n"
 		fi
 		pushd "kconfig-frontends-${kconfigver}" &>/dev/null
-		./configure --prefix="$scriptdir/kconfig_bin"
+		./configure --prefix="$scriptdir/bins"
 		if ! make; then
 			err_exit "Kconfig Build Failed\n"
 		fi
@@ -31,8 +69,7 @@ function compile_kconfig(){
 		popd &>/dev/null
 		chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/kconfig-frontends-${kconfigver}.tar.xz"
 		chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/kconfig-frontends-${kconfigver}"
-		chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/kconfig_bin"
-		kconfig_mconf="${scriptdir}/kconfig_bin/bin/kconfig_mconf"
+		kconfig_mconf="${scriptdir}/bins/bin/kconfig_mconf"
 		if [ ! -f "$xar" ]; then
 			err_exit "KConfig Build Failed\n"
 		fi
@@ -68,7 +105,7 @@ function compile_xar(){
 			err_exit "Extraction failed\n"
 		fi
 		pushd "xar-${xarver}" &>/dev/null
-		./configure --prefix="$scriptdir/xar_bin"
+		./configure --prefix="$scriptdir/bins"
 		if ! make; then
 			err_exit "Xar Build Failed\n"
 		fi
@@ -78,8 +115,7 @@ function compile_xar(){
 		popd &>/dev/null
 		chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/xar-${xarver}.tar.gz"
 		chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/xar-${xarver}"
-		chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/xar_bin"
-		xar="${scriptdir}/xar_bin/bin/xar"
+		xar="${scriptdir}/bins/bin/xar"
 		if [ ! -f "$xar" ]; then
 			err_exit "Xar Build Failed\n"
 		fi
@@ -89,10 +125,10 @@ function compile_xar(){
 function docheck_pbzx(){
 	if [ -z "$pbzx" ]; then
 		$lyellow; echo "Compiling pbzx..."; $normal
-		if ! gcc -Wall -pedantic "${scriptdir}/pbzx.c" -o "${scriptdir}/pbzx"; then
+		if ! gcc -Wall -pedantic "${scriptdir}/pbzx.c" -o "${scriptdir}/bins/bin/pbzx"; then
 			err_exit "pbzx Build Failed\n"
 		fi
-		pbzx="${scriptdir}/pbzx"
+		pbzx="${scriptdir}/bins/bin/pbzx"
 	fi
 }
 
@@ -135,13 +171,14 @@ function compile_d2i(){
 		$white; echo "sudo apt-get build-dep dmg2img"; $normal
 		err_exit ""
 	fi
-	if ! DESTDIR="$scriptdir/dmg2img_bin" make install; then
+	if ! DESTDIR="${scriptdir}/bins" make install; then
 		err_exit "dmg2img Install Failed\n"
 	fi
+	cp -Ra ${scriptdir}/bins/usr/* "${scriptdir}/bins/"
+	rm -rf ${scriptdir}/bins/usr
 	chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/dmg2img-${dmgimgversion}.tar.gz"
 	chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/dmg2img-${dmgimgversion}"
-	chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/dmg2img_bin"
-	dmg2img="$scriptdir/dmg2img_bin/usr/bin/dmg2img"
+	dmg2img="${scriptdir}/bins/bin/dmg2img"
 	if [ ! -f "$dmg2img" ]; then
 		err_exit "dmg2img Build Failed\n"
 	fi
