@@ -48,13 +48,37 @@ function do_init_qemu(){
 }
 
 function domount_part(){
-	if [ "$3" == "silent" ]; then
-		mount "$1" -t hfsplus -o rw,force /mnt/osx/$2 &>/dev/null 2>&1
-	else
-		mount "$1" -t hfsplus -o rw,force /mnt/osx/$2
+	local src="$1"
+	local type="$2"
+	local flags="$3"
+
+	local result
+
+	local mount_flags_pre="-t hfsplus"
+	local mount_flags_post="/mnt/osx/${type}"
+	if [ "$flags" == "silent" ]; then
+		mount_flags_post="${mount_flags_post} &>/dev/null 2>&1"
 	fi
 
-	return $?
+	if is_on DRV_HFSPLUS || [ "$type" == "target" ]; then
+		case $type in
+			esd|base)
+				mount_flags_pre="${mount_flags_pre} -o ro"
+				;;
+			*)
+				mount_flags_pre="${mount_flags_pre} -o rw,force"
+				;;
+		esac
+		eval mount ${mount_flags_pre} "${src}" ${mount_flags_post}
+		result=$?
+	elif is_on DRV_DARLING; then
+		$mount_hfs "$src" ${mount_flags_post}
+		result=$?
+	else
+		err_exit "Cannot mount ${src}. Driver not selected\n"
+	fi
+
+	return $result
 }
 
 function mount_part(){
@@ -72,17 +96,11 @@ function mount_part(){
 	if [ "$type" == "target" ]; then
 		if touch /mnt/osx/target/check_ro; then
 			rm /mnt/osx/target/check_ro
-		else
+		elif [ -b "${src}" ]; then
 			$lyellow; echo "Recovering volume..."; $normal
 			umount /mnt/osx/target
-			if [ $virtualdev == 1 ]; then
-				fsck.hfsplus -f -y /dev/nbd0p1 || err_exit "fsck failed!\n"
-				mount -t hfsplus -o rw,force /dev/nbd0p1 /mnt/osx/target
-			else
-				fsck.hfsplus -f -y "${src}" || err_exit "fsck failed!\n"
-				mount -t hfsplus -o rw,force "${src}" /mnt/osx/target
-			fi
-			result=$?
+			fsck.hfsplus -f -y "${src}" || err_exit "fsck failed!\n"
+			mount -t hfsplus -o rw,force "${src}" /mnt/osx/target || err_exit "mount failed!\n"
 		fi
 	fi
 	return $result
@@ -91,13 +109,29 @@ function mount_part(){
 function qemu_map(){
 	local nbdev=$1
 	local image=$2
-	qemu-nbd -d /dev/${nbdev} &>/dev/null
-	sync
-	qemu-nbd -f raw -c /dev/${nbdev} "${image}"
-	local result=$?
+	local result
+	qemu_unmap "${nbdev}"
+	local chk_var="${nbdev}_mapped"
+	if [ ! ${!chk_var} -eq 0 ]; then
+		result=1
+		return $result
+	fi
+	local qemu_args
+	if [ $vbhdd -eq 0 ]; then
+		qemu_args="-f raw"
+	fi
+	qemu-nbd ${qemu_args} -c /dev/${nbdev} "${image}"
+	result=$?
 	if [ $result -eq 0 ]; then
 		eval "${nbdev}_mapped=1"
-		partprobe /dev/${nbdev}
+		sleep 0.1
 	fi
 	return $result
+}
+
+function qemu_unmap(){
+	local nbdev=$1
+	qemu-nbd -d /dev/${nbdev} &>/dev/null
+	sync
+	eval "${nbdev}_mapped=0"
 }
