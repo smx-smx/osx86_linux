@@ -143,11 +143,11 @@ function do_preptarget(){
 	fi
 
 	if is_on PART_GPT; then
-		echo "Creating new ESP on $dev"
+		echo "Creating new ESP on $dev_target"
 		if ! parted -a optimal "$dev_target" --script -- mkpart ESP fat32 "1" "100MiB"; then
 			err_exit "Error: cannot create new partition\n"
 		fi
-		echo "Creating new Primary Active Partition on $dev"
+		echo "Creating new Primary Active Partition on $dev_target"
 		if ! parted -a optimal "$dev_target" --script -- mkpart primary hfs+ "100MiB" "-1"; then
 			err_exit "Error: cannot create new partition\n"
 		fi
