@@ -7,7 +7,6 @@ function payload_extractor(){
 
 	local gunzip
 	local bunzip2
-	local pbzx
 
 	if [[ "$fmt" =~ "gzip" ]]; then
 		find_cmd "gunzip" ""
@@ -16,7 +15,6 @@ function payload_extractor(){
 		find_cmd "bunzip2" ""
 		$bunzip2 -dc "${payload}" | ${cpio}
 	else
-		find_cmd "pbzx" "${scriptdir}"
 		$pbzx "${payload}" | xz -dc | ${cpio}
 	fi
 	if [ ! $? == 0 ]; then
@@ -28,6 +26,10 @@ function extract_pkg(){
 	pkgfile="$1"
 	dest="$2"
 	prompt="$3" #"skip" to avoid it
+
+	if [ -z $xar ]; then
+		err_exit "Xar missing or not enabled, cannot continue\n"
+	fi
 
 	local srcpath
 	local dstpath
@@ -52,10 +54,10 @@ function extract_pkg(){
 	$yellow; echo "Extracting ${pkgfile} to ${dest}"; $normal
 
 	pushd "${dstpath}" &>/dev/null
-	if ! $xar -xf  "${srcpath}"; then
+	if ! $xar -xf "${srcpath}"; then
 		popd &>/dev/null
 		$lred; echo "${pkgfile} extraction failed!"
-		return $result
+		return 1
 	fi
 
 	local pkgext=".${pkgfile##*.}"

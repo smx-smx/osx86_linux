@@ -184,12 +184,6 @@ function main(){
 		err_exit "Invalid dependencies, cannot continue!\n"
 	fi
 
-	# Export deps
-	export xar
-	export dmg2img
-	export pbzx
-	export mount_hfs
-
 	if [ "$in_ext" == ".pkg" ] || [ "$in_ext" == ".mpkg" ]; then #./install_osx.sh [file.pkg/mpkg]
 		if [ -z "$out_arg" ]; then #no dest dir
 			usage
