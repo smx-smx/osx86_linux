@@ -7,24 +7,34 @@ mainmenu "osx86_linux Configuration"
   menu "Advanced Options"
     menu "Build dependencies"
       config DEP_DMG2IMG
+        #depends on DRV_HFSPLUS
         bool "dmg2img"
+        default n
       config DEP_PBZX
+        #depends on OSX_110_SUPPORT
         bool "pbzx"
+        default n
       config DEP_KCONFIG
+        depends on OPT_REQUIRED
         bool "kconfig"
       config DEP_XAR
+        #depends on OSX_109_SUPPORT
         bool "xar"
+        default n
       config DEP_DARLING_DMG
+        #depends on DRV_DARLING
         bool "darling-dmg"
+        default n
     endmenu
 
     menu "Optional OS X Support"
-      config OSX_DO_XAR
+      config OSX_109_SUPPORT
         select DEP_XAR
         bool "OS X 10.9 Support"
         default y
 
-      config OSX_DO_PBZX
+      config OSX_110_SUPPORT
+        select OSX_109_SUPPORT
         select DEP_PBZX
         bool "OS X 10.10+ Support"
         default y
@@ -42,7 +52,9 @@ mainmenu "osx86_linux Configuration"
         select DEP_DARLING_DMG
         ---help---
           The darling-dmg driver supports DMG files directly without dmg2img.
-          It also supports Korean filenames correctly (avoids warnings on Korean font bundles)
+          It also supports Korean filenames correctly (avoids warnings on Korean font bundles).
+          It's slower than hfsplus and it's R/O, so hfsplus will still be used for the target.
+          Using this option avoids having to use dmg2img
 
       config DRV_HFSPLUS
         bool "hfsplus"
@@ -50,6 +62,7 @@ mainmenu "osx86_linux Configuration"
         ---help---
           The hfsplus driver comes from the Linux kernel.
           It doesn't support dmg files directly (requires dmg2img beforehand) and has a bug when handling Korean filenames (https://bugzilla.kernel.org/show_bug.cgi?id=15453)
+          It's faster than darling-dmg but doesn't support journaling (NOTE: it will be discarded) and requires dmg2img first to mount a dmg file
     endchoice
   endmenu
 
