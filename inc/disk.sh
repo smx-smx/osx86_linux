@@ -143,6 +143,9 @@ function domount_part(){
 			esd|base)
 				mount_flags_pre="${mount_flags_pre} -o ro"
 				;;
+			esp)
+				mount_flags_pre="-t vfat"
+				;;
 			*)
 				mount_flags_pre="${mount_flags_pre} -o rw,force"
 				;;

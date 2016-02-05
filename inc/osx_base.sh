@@ -163,18 +163,37 @@ function do_preptarget(){
 	sync
 
 	if [ $virtualdev -eq 1 ]; then
+		if is_on PART_GPT; then
+			dev_esp="${dev_target}p1"
+			dev_target="${dev_target}p2"
+		else
+			dev_target="${dev_target}1"
+		fi
+	else
+		if is_on PART_GPT; then
+			dev_esp="${dev_target}1"
+			dev_target="${dev_target}2"
+		else
+			dev_target="${dev_target}1"
+		fi
+	fi
+
+	if [ $virtualdev -eq 1 ]; then
 		$lyellow; echo "Remapping ${out_arg}..."; $normal
 		qemu_unmap "nbd0"
 		qemu_map "nbd0" "${out_arg}"
 	fi
 
-	$lyellow; echo "Formatting partition as HFS+"; $normal
-	if [ $virtualdev -eq 1 ]; then
-		dev_target="${dev_target}p1"
-	else
-		dev_target="${dev_target}1"
+	if is_on PART_GPT; then
+		$lyellow; echo "Formatting ESP..."; $normal
+		if ! mkfs.vfat -F32 "${dev_esp}"; then
+			err_exit "Error during ESP formatting\n"
+		fi
+		if ! mount_part "${dev_esp}" "esp"; then
+			err_exit "Cannot mount ESP\n"
+		fi
 	fi
-
+	$lyellow; echo "Formatting partition as HFS+..."; $normal
 	if ! mkfs.hfsplus "${dev_target}" -v "smx_installer"; then
 		err_exit "Error during HFS+ formatting\n"
 	fi
@@ -196,33 +215,43 @@ function do_system(){
 	else
 		rsync_source="/mnt/osx/esd/"
 	fi
-	rsync_flags="-ar ${verbose} --info=progress2"
-	local rsync_size
-	$white; echo "Calculating Base System size..."; $normal
-	rsync_size=$(du -B1 -sc ${rsync_source}/* | tail -n1 | awk '{print $1}')
-	$lyellow; echo "Copying Base System to "$dev"..."; $normal
-	dialog --title "osx86_linux" --gauge "Copying base system..." 10 75 < <(
-		rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/ | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
-			doneSz=$(trim $doneSz)
-			echo $((doneSz * 100 / rsync_size))
-		done
-	)
 
-	rsync_source="/mnt/osx/esd/Packages/"
-	$white; echo "Calculating Installation Packages size..."; $normal
-	rsync_size=$(du -B1 -sc ${rsync_source}/* | tail -n1 | awk '{print $1}')
-
-	if [ -d "/mnt/osx/esd/Packages" ]; then
-		rm $verbose /mnt/osx/target/System/Installation/Packages
-		mkdir $verbose /mnt/osx/target/System/Installation/Packages
-		dialog --title "osx86_linux" --gauge "Copying installation packages..." 10 75 < <(
-			rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/System/Installation/Packages/ | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
+	if [ $log_mode -eq 1 ]; then
+		rsync_flags="-ar ${verbose}"
+		rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/
+	else
+		rsync_flags="-ar ${verbose} --info=progress2"
+		local rsync_size
+		$white; echo "Calculating Base System size..."; $normal
+		rsync_size=$(du -B1 -sc ${rsync_source}/* | tail -n1 | awk '{print $1}')
+		$lyellow; echo "Copying Base System to "$dev"..."; $normal
+		dialog --title "osx86_linux" --gauge "Copying base system..." 10 75 < <(
+			rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/ | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
 				doneSz=$(trim $doneSz)
 				echo $((doneSz * 100 / rsync_size))
 			done
 		)
 	fi
-	sync
+
+	if [ -d "/mnt/osx/esd/Packages" ]; then
+		rm $verbose /mnt/osx/target/System/Installation/Packages
+		mkdir $verbose /mnt/osx/target/System/Installation/Packages
+
+		rsync_source="/mnt/osx/esd/Packages/"
+		if [ $log_mode -eq 1 ]; then
+			rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/System/Installation/Packages/
+		else
+			$white; echo "Calculating Installation Packages size..."; $normal
+			rsync_size=$(du -B1 -sc ${rsync_source}/* | tail -n1 | awk '{print $1}')
+			dialog --title "osx86_linux" --gauge "Copying installation packages..." 10 75 < <(
+				rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/System/Installation/Packages/ | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
+					doneSz=$(trim $doneSz)
+					echo $((doneSz * 100 / rsync_size))
+				done
+			)
+		fi
+		sync
+	fi
 }
 
 function do_kernel(){

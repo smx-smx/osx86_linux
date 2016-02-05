@@ -3,8 +3,10 @@ source inc/colors.sh
 source inc/utils.sh
 
 export really_verbose=0
+export log_mode=1
+
 function initlog(){
-	export logfile=`date +%d-%b-%y_%H%M%S`".log"
+	logfile=`date +%d-%b-%y_%H%M%S`".log"
 	if [ -f "${scriptdir}/${logfile}" ]; then
 		rm "${scriptdir}/${logfile}"
 	fi

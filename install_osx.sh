@@ -6,12 +6,14 @@ else
 	program_revision="git"
 fi
 
+verbose=""
+if [ -z $log_mode ]; then
+	log_mode=0
+fi
 if [ -z $really_verbose ]; then
 	really_verbose=0
 elif [ $really_verbose -eq 1 ]; then
 	verbose="-v"
-else
-	verbose=""
 fi
 
 trap err_exit SIGINT
@@ -50,7 +52,7 @@ function cleanup() {
 
 	local result=0
 	if [ -d /mnt/osx ]; then
-		for mountpoint in base esd target; do
+		for mountpoint in esp base esd target; do
 			while grep -q "$mountpoint" /proc/mounts; do
 				$yellow; echo "umount /mnt/osx/${mountpoint}"; $normal
 				if ! umount "/mnt/osx/${mountpoint}"; then
@@ -203,6 +205,8 @@ function main(){
 
 	# Create working dir
 	if [ ! -d /mnt/osx ]; then mkdir -p /mnt/osx; fi
+	# Create ESP mountpoint
+	if [ ! -d /mnt/osx/esp ]; then mkdir /mnt/osx/esp; fi
 	# Create ESD mountpoint
 	if [ ! -d /mnt/osx/esd ]; then mkdir /mnt/osx/esd; fi
 	# Create BaseSystem mountpoint
@@ -220,6 +224,7 @@ function main(){
 	dev_esd=""
 	dev_base=""
 	dev_target=""
+	dev_esp=""
 	size=$3 #for img creation
 
 	virtualdev=0
