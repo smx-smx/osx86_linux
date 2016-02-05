@@ -128,14 +128,33 @@ function do_preptarget(){
 		chown "$SUDO_USER":"$SUDO_USER" "$dev_target"
 	fi
 
+	local part_scheme
+	if is_on PART_MBR; then
+		part_scheme="msdos"
+	elif is_on PART_GPT; then
+		part_scheme="gpt"
+	else
+		err_exit "No partition scheme selected!\n"
+	fi
+
 	echo "Creating Partition Table on $dev_target..."
-	if ! parted -a optimal "$dev_target" mklabel msdos; then
+	if ! parted -a optimal "$dev_target" mklabel ${part_scheme}; then
 		err_exit "Error during partition table creation\n"
 	fi
 
-	echo "Creating new Primary Active Partition on $dev"
-	if ! parted -a optimal "$dev_target" --script -- mkpart primary hfs+ "1" "-1"; then
-		err_exit "Error: cannot create new partition\n"
+	if is_on PART_GPT; then
+		echo "Creating new ESP on $dev"
+		if ! parted -a optimal "$dev_target" --script -- mkpart ESP fat32 "1" "100MiB"; then
+			err_exit "Error: cannot create new partition\n"
+		fi
+		echo "Creating new Primary Active Partition on $dev"
+		if ! parted -a optimal "$dev_target" --script -- mkpart primary hfs+ "100MiB" "-1"; then
+			err_exit "Error: cannot create new partition\n"
+		fi
+	else
+		if ! parted -a optimal "$dev_target" --script -- mkpart primary hfs+ "1" "-1"; then
+			err_exit "Error: cannot create new partition\n"
+		fi
 	fi
 
 	parted -a optimal "$dev_target" set 1 boot on
