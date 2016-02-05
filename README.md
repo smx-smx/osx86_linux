@@ -8,14 +8,9 @@ This script creates an osx86 installer starting from a dmg file (InstallESD or I
 Should work with OS X Snow leopard (10.6) and above
  
 TODO:
-- GPT support
-- UEFI support
 - Clover support
 - Vanilla installer support (via boot.efi)
 - Some form of dialog / UI
-- Config file
-- Use FUSE to access the DMG directly instead of dmg2img
-- Modularize more parts of the main script
 - Cleanup old code
 
 ### Dependencies
