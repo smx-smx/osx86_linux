@@ -234,12 +234,3 @@ function do_kernel(){
 		echo "Media will likely be unbootable!"; $normal
 	fi
 }
-
-function do_finalize(){
-	do_kexts
-	do_remcache
-	do_kextperms
-	docheck_chameleon
-	docheck_smbios
-	docheck_dsdt
-}
