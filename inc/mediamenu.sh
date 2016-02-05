@@ -154,7 +154,7 @@ function fileChooser(){
       install_dir="/mnt/osx/target/Extra/Extensions"
       ;;
     */chameleon/Modules)
-      install_dir="/mnt/osx/target/Extra/Extensions"
+      install_dir="/mnt/osx/target/Extra/Modules"
       ;;
   esac
 
