@@ -121,6 +121,13 @@ function main(){
 		export SUDO_USER="root"
 	fi
 
+	check_commands	#check that all required commands exist
+	find_cmd "xar" "${scriptdir}/bins/bin"
+	find_cmd "dmg2img" "${scriptdir}/bins/bin"
+	find_cmd "pbzx" "${scriptdir}"
+	find_cmd "kconfig_mconf" "${scriptdir}/bins/bin" "kconfig-mconf"
+	find_cmd "mount_hfs" "${scriptdir}/bins/bin" "darling-dmg"
+
 	if [ $# == 0 ] ||
 	[ "$1" == "-h" ] ||
 	[ "$1" == "--help" ] ||
@@ -144,26 +151,19 @@ function main(){
 	out_name="${name%.*}"
 	unset name
 
+	docheck_kconfig
 	load_config
 
 	if is_on DEP_XAR; then
-		find_cmd "xar" "${scriptdir}/bins/bin"
 		docheck_xar
 	fi
 	if is_on DEP_DMG2IMG; then
-		find_cmd "dmg2img" "${scriptdir}/bins/bin"
 		docheck_dmg2img
 	fi
 	if is_on DEP_PBZX; then
-		find_cmd "pbzx" "${scriptdir}"
 		docheck_pbzx
 	fi
-	if is_on DEP_KCONFIG; then
-		find_cmd "kconfig_mconf" "${scriptdir}/bins/bin" "kconfig-mconf"
-		docheck_kconfig
-	fi
 	if is_on DEP_DARLING_DMG; then
-		find_cmd "mount_hfs" "${scriptdir}/bins/bin" "darling-dmg"
 		docheck_darlingdmg
 	fi
 
@@ -296,12 +296,6 @@ function main(){
 
 	dev_target="$out_arg"
 
-	if [ -z $commands_checked ]; then	commands_checked=0; fi
-	if [ $commands_checked == 0 ]; then
-		check_commands	#Check all required commands exist
-		commands_checked=1
-		export commands_checked
-	fi
 	if [[ $in_arg == "/dev/sr[0-9]" ]]; then
 		$lgreen; echo "CD Source Device Detected"; $normal
 		if [ -z "$out_arg" ]; then
