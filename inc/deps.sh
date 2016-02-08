@@ -2,7 +2,7 @@
 dmgimgversion="1.6.5"
 xarver="1.5.2"
 kconfigver="3.12.0.0"
-darling_dmgver="1.0.3"
+darling_dmgver="1.0.4"
 
 
 function check_commands {
