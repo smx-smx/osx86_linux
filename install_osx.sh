@@ -121,6 +121,8 @@ function main(){
 		export SUDO_USER="root"
 	fi
 
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${scriptdir}/bins/lib
+
 	check_commands	#check that all required commands exist
 	find_cmd "xar" "${scriptdir}/bins/bin"
 	find_cmd "dmg2img" "${scriptdir}/bins/bin"
