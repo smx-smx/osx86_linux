@@ -103,9 +103,7 @@ function do_preptarget(){
 				err_exit "Couldn't unmount "$part"\n"
 			fi
 		done
-		isRO=$(isRO "$dev_target")
-		echo "isRemovable = $isRO"
-		if [ $isRO -eq 0 ]; then
+		if ! isRemovable "${dev_target}"; then
 			$lred; echo "WARNING, "$dev_target" IS NOT A REMOVABLE DEVICE!"
 			echo "ARE YOU SURE OF WHAT YOU ARE DOING?"
 			read -p "Are you REALLY sure you want to continue? (y/n)" -n1 -r

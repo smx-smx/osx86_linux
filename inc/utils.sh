@@ -39,17 +39,3 @@ function isEmpty() {
 		return 1 #bad, not empty
 	fi
 }
-
-function isRO(){
-	local mountdev="$1"
-	local dev_major=$(stat -c "%t" "${mountdev}")
-	local dev_minor=$(stat -c "%T" "${mountdev}")
-	if [ ! -f "/sys/dev/block/${dev_major}:${dev_minor}/ro" ]; then
-		err_exit "Can't get readonly flag\n"
-	fi
-	local isRO=$(cat /sys/dev/block/${dev_major}:${dev_minor}/ro)
-	if [ ${isRO} -eq 1 ]; then
-		err_exit "${mountdev} is mounted in R/O mode!\n"
-	fi
-	return ${isRO}
-}

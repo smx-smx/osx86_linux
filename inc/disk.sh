@@ -1,4 +1,27 @@
 #!/bin/bash
+function isRO(){
+	local mountdev="$1"
+	local dev_major=$((0x$(stat -c "%t" "${mountdev}")))
+	local dev_minor=$((0x$(stat -c "%T" "${mountdev}")))
+	if [ ! -f "/sys/dev/block/${dev_major}:${dev_minor}/ro" ]; then
+		err_exit "Can't get readonly flag\n"
+	fi
+	local isRO=$(cat /sys/dev/block/${dev_major}:${dev_minor}/ro)
+	return $((${isRO} ^ 1))
+}
+
+function isRemovable(){
+	local mountdev="$1"
+	local dev_major=$((0x$(stat -c "%t" "${mountdev}")))
+	local dev_minor=$((0x$(stat -c "%T" "${mountdev}")))
+	if [ ! -f "/sys/dev/block/${dev_major}:${dev_minor}/removable" ]; then
+		err_exit "Can't get removable flag\n"
+	fi
+	local isRemovable=$(cat /sys/dev/block/${dev_major}:${dev_minor}/removable)
+	return $((${isRemovable} ^ 1))
+}
+
+
 function vdev_check(){
 	echo "Virtual HDD Image Mode"
 	virtualdev=1
@@ -20,8 +43,7 @@ function vdev_check(){
 	if [ ! -b "${mountdev}" ]; then
 		err_exit "${mountdev} is not a valid block device\n"
 	fi
-	local isRO=$(isRO "${mountdev}"; echo $?)
-	if [ $isRO -eq 1 ]; then
+	if isRO "${mountdev}"; then
 		err_exit "${mountdev} is mounted in R/O mode!\n"
 	fi
 	if [ "${fstype}" == "ntfs" ] && [ "${fstype}" == "fuseblk" ]; then
