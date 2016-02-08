@@ -148,7 +148,7 @@ function compile_kconfig(){
 		chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/kconfig-frontends-${kconfigver}.tar.xz"
 		chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/kconfig-frontends-${kconfigver}"
 		kconfig_mconf="${scriptdir}/bins/bin/kconfig_mconf"
-		if [ ! -f "$xar" ]; then
+		if [ ! -f "$kconfig_mconf" ]; then
 			err_exit "KConfig Build Failed\n"
 		fi
 }
