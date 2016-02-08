@@ -218,13 +218,14 @@ function do_system(){
 
 	if [ $log_mode -eq 1 ]; then
 		rsync_flags="-ar ${verbose}"
+		$white; echo "Copying Base System to ${dev_target}..."; $normal
 		rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/
 	else
 		rsync_flags="-ar ${verbose} --info=progress2"
 		local rsync_size
 		$white; echo "Calculating Base System size..."; $normal
 		rsync_size=$(du -B1 -sc ${rsync_source}/* | tail -n1 | awk '{print $1}')
-		$lyellow; echo "Copying Base System to "$dev"..."; $normal
+		$white; echo "Copying Base System to ${dev_target}..."; $normal
 		dialog --title "osx86_linux" --gauge "Copying base system..." 10 75 < <(
 			rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/ | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
 				doneSz=$(trim $doneSz)
@@ -239,6 +240,7 @@ function do_system(){
 
 		rsync_source="/mnt/osx/esd/Packages/"
 		if [ $log_mode -eq 1 ]; then
+			$white; echo "Copying installation packages..."; $normal
 			rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/System/Installation/Packages/
 		else
 			$white; echo "Calculating Installation Packages size..."; $normal
