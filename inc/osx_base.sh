@@ -167,9 +167,9 @@ function do_preptarget(){
 			dev_esp="${dev_target}p1"
 			dev_target="${dev_target}p2"
 		else
-			dev_target="${dev_target}1"
+			dev_target="${dev_target}p1"
 		fi
-	else
+	else #virtualdev
 		if is_on PART_GPT; then
 			dev_esp="${dev_target}1"
 			dev_target="${dev_target}2"
