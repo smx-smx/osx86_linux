@@ -124,7 +124,7 @@ function main(){
 	check_commands	#check that all required commands exist
 	find_cmd "xar" "${scriptdir}/bins/bin"
 	find_cmd "dmg2img" "${scriptdir}/bins/bin"
-	find_cmd "pbzx" "${scriptdir}"
+	find_cmd "pbzx" "${scriptdir}/bins/bin"
 	find_cmd "kconfig_mconf" "${scriptdir}/bins/bin" "kconfig-mconf"
 	find_cmd "mount_hfs" "${scriptdir}/bins/bin" "darling-dmg"
 
