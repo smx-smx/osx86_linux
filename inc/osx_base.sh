@@ -216,6 +216,8 @@ function do_system(){
 		rsync_source="/mnt/osx/esd/"
 	fi
 
+	local DIALOG_THRES=50
+
 	if [ $log_mode -eq 1 ]; then
 		rsync_flags="-ar ${verbose}"
 		$white; echo "Copying Base System to ${dev_target}..."; $normal
@@ -227,9 +229,14 @@ function do_system(){
 		rsync_size=$(du -B1 -sc ${rsync_source}/* | tail -n1 | awk '{print $1}')
 		$white; echo "Copying Base System to ${dev_target}..."; $normal
 		dialog --title "osx86_linux" --gauge "Copying base system..." 10 75 < <(
+			local lines=0
 			rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/ | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
 				doneSz=$(trim $doneSz)
-				echo $((doneSz * 100 / rsync_size))
+				lines=$(($lines + 1))
+				if [ $lines -gt $DIALOG_THRES ]; then
+					echo $((doneSz * 100 / rsync_size))
+					lines=0
+				fi
 			done
 		)
 	fi
@@ -246,9 +253,14 @@ function do_system(){
 			$white; echo "Calculating Installation Packages size..."; $normal
 			rsync_size=$(du -B1 -sc ${rsync_source}/* | tail -n1 | awk '{print $1}')
 			dialog --title "osx86_linux" --gauge "Copying installation packages..." 10 75 < <(
+				local lines=0
 				rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/System/Installation/Packages/ | unbuffer -p awk '{print $1}' | sed 's/,//g' | while read doneSz; do
 					doneSz=$(trim $doneSz)
-					echo $((doneSz * 100 / rsync_size))
+					lines=$(($lines + 1))
+					if [ $lines -gt $DIALOG_THRES ]; then
+						echo $((doneSz * 100 / rsync_size))
+						lines=0
+					fi
 				done
 			)
 		fi
