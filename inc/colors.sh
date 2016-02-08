@@ -1,5 +1,5 @@
 #!/bin/bash
-export normal='tput sgr0'
+export normal='printf \e[0m'
 export bold='setterm -bold'
 
 export red='printf \033[00;31m'

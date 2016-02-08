@@ -13,7 +13,7 @@ function check_commands {
 	#	echo &>/dev/null
 	#else
 		commands=(
-			'grep' 'tput' 'dd' 'sed'
+			'grep' 'dd' 'sed'
 			'parted' 'awk' 'mkfs.hfsplus'
 			'wget' 'dirname' 'basename'
 			'parted' 'pidof' 'gunzip'

@@ -14,7 +14,7 @@ TODO:
 - Cleanup old code
 
 ### Dependencies
-`apt-get install build-essential libbz2-dev libxml2-dev tput qemu-utils hfsprogs dialog expect`
+`apt-get install build-essential libbz2-dev libxml2-dev qemu-utils hfsprogs dialog expect`
 ##### dmg2img
 `apt-get build-dep dmg2img`
 ##### kconfig
