@@ -12,7 +12,12 @@ function check_commands {
 		#add checks for other commands after the initial check
 	#	echo &>/dev/null
 	#else
-		commands=('dialog' 'grep' 'tput' 'dd' 'sed' 'parted' 'awk' 'mkfs.hfsplus' 'wget' 'dirname' 'basename' 'parted' 'pidof' 'gunzip' 'bunzip2' 'cpio')
+		commands=(
+			'grep' 'tput' 'dd' 'sed'
+			'parted' 'awk' 'mkfs.hfsplus'
+			'wget' 'dirname' 'basename'
+			'parted' 'pidof' 'gunzip'
+			'bunzip2' 'cpio' 'unbuffer')
 	#fi
 	for command in "${commands[@]}"; do
 		if ! check_command $command == 0; then
