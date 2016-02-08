@@ -1,10 +1,14 @@
 #!/bin/bash
 function docheck_chameleon(){
-	if  [ -f  "$scriptdir/chameleon/boot1h" ] && [ -f  "$scriptdir/chameleon/boot" ]; then
-		do_chameleon
+	if is_on PART_GPT; then
+		$lred; echo "Cannot install chameleon on GPT drives!"; $normal
 	else
-		$lred; echo "WARNING: Cannot install Chameleon, critical files missing"
-		echo "Your installation won't be bootable"; $normal
+		if  [ -f  "$scriptdir/chameleon/boot1h" ] && [ -f  "$scriptdir/chameleon/boot" ]; then
+			do_chameleon
+		else
+			$lred; echo "WARNING: Cannot install Chameleon, critical files missing"
+			echo "Your installation won't be bootable"; $normal
+		fi
 	fi
 }
 
