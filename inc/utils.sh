@@ -1,7 +1,7 @@
 #!/bin/bash
 function trim(){
 	local text="$*"
-	echo -ne "${text//[$'\t\r\n']}"
+	echo -ne "${text//[$'\b\t\r\n']}"
 }
 
 function negate(){
@@ -14,6 +14,17 @@ function pause() {
 	else
 		$white; read -p "$*"; $normal
 	fi
+}
+
+function read_yn(){
+	local prompt="$*"
+	read -p "${prompt} (y/n)" -n2 -r
+	if [[ $REPLY =~ ^[Yy]$ ]];then
+		return 0 #ok
+	fi
+
+	# Anything else is bad
+	return 1
 }
 
 function err_wexit() {
