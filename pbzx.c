@@ -10,6 +10,12 @@
 #include <stdlib.h> // malloc
 #include <stdint.h>
 
+#ifdef DUMP_CHUNKS
+static int dump_chunks = 1;
+#else
+static int dump_chunks=  0;
+#endif
+
 int main(int argc, const char *argv[])
 {
 
@@ -63,9 +69,25 @@ int main(int argc, const char *argv[])
       } else { // if we have the header, there had better be a footer, too
         if (strncmp(buf + length -2, "YZ", 2)) {
           fprintf (stderr, "Warning: Can't find XZ footer. This is probably bad.\n");
-        }
+        } else {
+	  write (1, buf, length);
+	}
       }
-      write (1, buf, length);
+      if(dump_chunks){
+	char *chunk_path;
+	asprintf(&chunk_path, "chunk_%u.xz", i);
+	int chunk_fd = open(chunk_path, O_WRONLY | O_CREAT, (mode_t)0666);
+	free(chunk_path);
+	if(chunk_fd < 0){
+		fprintf(stderr, "ERROR: Cannot open the chunk for writing\n");
+		fprintf(stderr, "Disabling dump mode...\n");
+		dump_chunks = 0;
+	} else {
+		write(chunk_fd, buf, length);
+		close(chunk_fd);
+	}
+      }
+      free(buf);
     }
 
     return 0;
