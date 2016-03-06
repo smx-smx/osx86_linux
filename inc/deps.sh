@@ -1,6 +1,6 @@
 #!/bin/bash
 dmgimgversion="1.6.5"
-xarver="1.5.2"
+xarver="1.6.1"
 kconfigver="3.12.0.0"
 darling_dmgver="1.0.4"
 
@@ -179,7 +179,7 @@ function docheck_xar(){
 function compile_xar(){
 	$lyellow; echo "Compiling xar..."; $normal
 	if [ ! -f "xar-"$xarver".tar.gz" ]; then
-		if ! wget "http://xar.googlecode.com/files/xar-"$xarver".tar.gz"; then
+		if ! wget "https://github.com/downloads/mackyle/xar/xar-${xarver}.tar.gz"; then
 			err_exit "Download failed\n"
 		fi
 	fi
