@@ -1,9 +1,13 @@
 #!/bin/bash
 function payload_extractor(){
-	payload="$1"
+	local payload="$1"
+	local pattern="$2"
+
 	local fmt=$(file -b --mime-type "${payload}")
-	local cpio="cpio -i --no-absolute-filenames"
-	local unarch
+	local cpio="cpio -i -d --no-absolute-filenames"
+	if [ ! -z "$pattern" ]; then
+		cpio="${cpio} ${pattern}"
+	fi
 
 	local gunzip
 	local bunzip2
@@ -23,9 +27,9 @@ function payload_extractor(){
 }
 
 function extract_pkg(){
-	pkgfile="$1"
-	dest="$2"
-	prompt="$3" #"skip" to avoid it
+	local pkgfile="$1"
+	local dest="$2"
+	local pattern="$3"
 
 	if [ -z $xar ]; then
 		err_exit "Xar missing or not enabled, cannot continue\n"
@@ -64,7 +68,7 @@ function extract_pkg(){
 	$lyellow; echo "Extracting Payloads..."; $normal
 	find . -type f -name "Payload" -print0 | while read -r -d '' payload; do
 		echo "Extracting "${payload}"..."
-		payload_extractor "${payload}"
+		payload_extractor "${payload}" "${pattern}"
 	done
 	popd &>/dev/null
 
@@ -74,16 +78,14 @@ function extract_pkg(){
 	find "${dstpath}" -type d -exec chmod 755 {} \;
 	find "${dstpath}" -type f -exec chmod 666 {} \;
 
-	if [ ! "$prompt" == "skip" ]; then
-		read -p "Do you want to remove temporary packed payloads? (y/n)" -n1 -r
-		echo
-		if [[ $REPLY =~ ^[Yy]$ ]] || [ "$pkg_keep_payloads" == "false" ];then
-			echo "Removing Packed Files..."
-			find ${dstpath} -type f -name "Payload" -delete
-			find ${dstpath} -type f -name "Scripts" -delete
-			find ${dstpath} -type f -name "PackageInfo" -delete
-			find ${dstpath} -type f -name "Bom" -delete
-		fi
+	# TODO: option not yet implemented
+	# if !is_on PKG_KEEP_PAYLOADS; then
+	if false; then
+		echo "Removing Packed Files..."
+		find "${dstpath}" -type f -name "Payload" -delete
+		find "${dstpath}" -type f -name "Scripts" -delete
+		find "${dstpath}" -type f -name "PackageInfo" -delete
+		find "${dstpath}" -type f -name "Bom" -delete
 	fi
 
 	return 0
