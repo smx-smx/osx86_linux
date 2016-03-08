@@ -360,7 +360,7 @@ function main(){
 		err_exit "Cannot mount esd\n"
 	fi
 
-	if [ -f "/mnt/osx/esd/BaseSystem.dmg" ]; then
+	if is_splitted; then
 		if is_on DRV_HFSPLUS; then
 			if is_on DEP_DMG2IMG; then
 				outfile="${filepath}/BaseSystem.img"
@@ -401,7 +401,7 @@ function main(){
 	detect_osx_version
 
 	do_system
-	do_kernel "esd"
+	do_kernel
 
 	if [ ! "$patchmbr" == "false" ]; then
 		docheck_mbr
