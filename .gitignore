@@ -3,3 +3,5 @@
 # Logs + ansi2html logs
 *.log
 *.html
+# NodeJS modules
+node_modules
