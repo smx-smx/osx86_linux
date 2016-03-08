@@ -414,18 +414,14 @@ function main(){
 	do_cleanup
 	$lgreen; echo "All Done!"; $normal
 	if [ $virtualdev == 1 ] && [ "$out_ext" == ".img" ] || [ "$out_ext" == ".hdd" ]; then
-		read -p "Do you want to convert virtual image to a VDI file? (y/n)" -n1 -r
-		echo
-		if [[ $REPLY =~ ^[Yy]$ ]];then
+		if read_yn "Do you want to convert virtual image to a VDI file?"; then
 			if ! vboxmanage convertdd  "${out_arg}" "${devpath}/${out_name}.vdi" || [ ! -f "${devpath}/${out_name}.vdi" ]; then
 				err_exit "Conversion Failed\n"
 			else
 				chmod 666 "$devpath/$dfilename".vdi
 				chown "$SUDO_USER":"$SUDO_USER" "$devpath/$dfilename".vdi
-				read -p "Do you want to delete the img file? (y/n)" -n1 -r
-				echo
-				if [[ $REPLY =~ ^[Yy]$ ]];then
-					rm "${out_arg}"
+				if read_yn "Do you want to delete the img file?"; then
+					rm ${verbose} "${out_arg}"
 				fi
 			fi
 		fi
