@@ -16,6 +16,25 @@ function pause() {
 	fi
 }
 
+function md5_compare(){
+	local file1="$1"
+	local file2="$2"
+
+	local chksum1="$(md5sum "${file1}" | awk '{print $1}')"
+	if [ ! ${PIPESTATUS[0]} -eq 0 ]; then
+		#error
+		return $?
+	fi
+	local chksum2="$(md5sum "${file2}" | awk '{print $1}')"
+	if [ ! ${PIPESTATUS[0]} -eq 0 ]; then
+		#error
+		return $?
+	fi
+
+	[ "${chksum1}" == "${chksum2}" ] && return 0
+	return 1
+}
+
 function read_yn(){
 	local prompt="$*"
 	read -p "${prompt} (y/n)" -n2 -r

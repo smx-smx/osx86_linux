@@ -312,10 +312,10 @@ function do_kernel(){
 		path="${path_pre}/${path_post}"
 		if [ -f "${path}" ]; then
 			$lgreen; echo "Found mach_kernel in ${mountpoint}"; $normal
-			if [ ! -f "${prefix}/${path_post}" ]; then
-				cp -ar ${verbose} "${path}" "${prefix}/${path_post}"
-			else
+			if [ -f "${prefix}/${path_post}" ] && md5_compare "${prefix}/${path_post}" "${path}"; then
 				$lgreen; echo "Kernel found, copy not needed"; $normal
+			else
+				cp -ar ${verbose} "${path}" "${prefix}/${path_post}"
 			fi
 			result=0
 			break
@@ -336,10 +336,10 @@ function do_kernel(){
 				kernel=$(ls -1 ${path} | head -n1)
 				if [ -f "${path}/${kernel}" ]; then
 					$lgreen; echo "Found prelinkedkernel in ${mountpoint}"; $normal
-					if [ ! -f "${prefix}/${path_post}/${kernel}" ]; then
-						cp -ar ${verbose} "${path}/${kernel}" "${prefix}/${path_post}/${kernel}"
-					else
+					if [ -f "${prefix}/${path_post}/${kernel}" ] && md5_compare "${prefix}/${path_post}/${kernel}" "${path}/${kernel}"; then
 						$lgreen; echo "Kernel found, copy not needed"; $normal
+					else
+						cp -ar ${verbose} "${path}/${kernel}" "${prefix}/${path_post}/${kernel}"
 					fi
 					result=0
 					break
@@ -359,10 +359,10 @@ function do_kernel(){
 				kernel=$(ls -1 ${path} | head -n1)
 				if [ -f "${path}/${kernel}" ]; then
 					$lgreen; echo "Found kernelcache in ${mountpoint}"; $normal
-					if [ ! -f "${prefix}/${path_post}/${kernel}" ]; then
-						cp -ar ${verbose} "${path}/${kernel}" "${prefix}/${path_post}/${kernel}"
-					else
+					if [ -f "${prefix}/${path_post}/${kernel}" ] && md5_compare "${prefix}/${path_post}/${kernel}" "${path}/${kernel}"; then
 						$lgreen; echo "Kernel found, copy not needed"; $normal
+					else
+						cp -ar ${verbose} "${path}/${kernel}" "${prefix}/${path_post}/${kernel}"
 					fi
 					result=0
 					break
@@ -371,10 +371,10 @@ function do_kernel(){
 		fi
 	done
 
-	$white; echo "Searching in installation packages..."; $normal
-
 	# Nothing found, try installation packages
 	if [ ! $result -eq 0 ]; then
+		$white; echo "Searching in installation packages..."; $normal
+
 		local pkg_file
 		local kernel_path
 		local osver_minor=$(echo $osver | cut -d '.' -f2)
@@ -397,6 +397,7 @@ function do_kernel(){
 
 		if [ ! -z "${pkg_file}" ]; then
 			$lyellow; echo "Kernel found in ${pkg_file}"; $normal
+			# We can't check md5 here unless we extract, and extraction is slow
 			if [ -f "${prefix}/${kernel_path}" ]; then
 				$lgreen; echo "Kernel found, copy not needed"; $normal
 				result=0
