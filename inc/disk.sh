@@ -16,6 +16,10 @@ function isRO(){
 
 function isRemovable(){
 	local mountdev="$1"
+	#if it's a link, follow it
+	if [ -L "${mountdev}" ]; then
+		mountdev=$(readlink -f "${mountdev}")
+	fi
 	local dev_major=$((0x$(stat -c "%t" "${mountdev}")))
 	local dev_minor=$((0x$(stat -c "%T" "${mountdev}")))
 	if [ ! -f "/sys/dev/block/${dev_major}:${dev_minor}/removable" ]; then
