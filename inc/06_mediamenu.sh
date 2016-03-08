@@ -7,16 +7,11 @@ function mediamenu(){
 			if ! qemu_map "0" "${G_IN_ARG}"; then
 				err_exit "Can't map ${G_IN_ARG}\n"
 			fi
-			G_DEV_TARGET="${G_DEV_NBD0}"
-      		if [ ${G_VIRTUALDEV} -eq 1 ]; then
-		        G_DEV_TARGET="${G_DEV_TARGET}p1"
-      		else
-		        G_DEV_TARGET="${G_DEV_TARGET}1"
-      		fi
+			G_DEV_TARGET=$(get_part "${G_DEV_NBD0}" 1)
 		fi
-		if [ ! -b "${G_DEV_NBD0}p1" ]; then
-			err_exit "Corrupted image\n"
-		fi
+	fi
+	if [ ! -b "${G_DEV_TARGET}" ]; then
+		err_exit "Cannot find partition. Corrupted drive/image\n"
 	fi
 
 	if ! grep -q "${G_MOUNTP_TARGET}" /proc/mounts; then
