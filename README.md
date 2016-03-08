@@ -8,10 +8,11 @@ This script creates an osx86 installer starting from a dmg file (InstallESD or I
 Should work with OS X Snow leopard (10.6) and above
  
 TODO:
-- Clover support
+- Clover support (currently not tested/working)
 - Vanilla installer support (via boot.efi)
 - Some form of dialog / UI
 - Cleanup old code
+- Test the current code with different images or environments
 
 ### Dependencies
 
@@ -53,9 +54,14 @@ For MBR Patch:
 - osinstall_mbr/OSInstall
 - osinstall_mbr/OSInstall.mpkg
 
-Custom SMBios:
+For Custom SMBios:
+- Place smbios.plist in script directory
 
-Place smbios.plist in script directory
+Note: You will need to run kconfig first to configure the script and create .config. The script won't run otherwise
+
+To do so, run `./bins/bin/kconfig-mconf Kconfig` from the script directory.
+
+If you prefer, you can use kconfig-nconf, konfig-gconf or kconfig-qconf for a different configuration interface.
 
 see ./install_osx.sh -h for usage
 
