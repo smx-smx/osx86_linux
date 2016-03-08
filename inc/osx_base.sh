@@ -223,6 +223,9 @@ function copy_progress(){
 	local rsync_source="$3"
 	local rsync_dest="$4"
 
+	# Number of rsync output lines that will cause a progress update
+	local DIALOG_THRES=50
+
 	local rsync_size
 	$white; echo "Calculating ${desc} size..."; $normal
 	rsync_size=$(du -b --apparent-size -sc ${rsync_source}/* | tail -n1 | awk '{print $1}')
@@ -256,14 +259,13 @@ function do_system(){
 		rsync_source="/mnt/osx/esd/"
 	fi
 
-	local DIALOG_THRES=50
+	rsync_flags="-ar ${verbose}"
 
 	if [ $log_mode -eq 1 ]; then
-		rsync_flags="-ar ${verbose}"
 		$white; echo "Copying Base System to ${dev_target}..."; $normal
 		rsync ${rsync_flags} ${rsync_source} /mnt/osx/target/
 	else
-		rsync_flags="-ar ${verbose} --info=progress2"
+		rsync_flags="${rsync_flags} --info=progress2"
 		copy_progress "Base System" "${rsync_flags}" "${rsync_source}" "/mnt/osx/target/"
 	fi
 
@@ -303,6 +305,24 @@ function do_kernel(){
 	for mountpoint in $paths; do
 		$lyellow; echo "Searching for kernels in ${mountpoint}..."; $normal
 
+		# Look for mach_kernel. If it's found and it's not present, copy it
+		$white; echo "Searching for mach_kernel..."; $normal
+		path_post="/mach_kernel"
+
+		path="${path_pre}/${path_post}"
+		if [ -f "${path}" ]; then
+			$lgreen; echo "Found mach_kernel in ${mountpoint}"; $normal
+			if [ ! -f "${prefix}/${path_post}" ]; then
+				cp -ar ${verbose} "${path}" "${prefix}/${path_post}"
+			else
+				$lgreen; echo "Kernel found, copy not needed"; $normal
+			fi
+			result=0
+			break
+		fi
+
+
+		# No mach_kernel found. Look for prelinked kernels
 		$white; echo "Searching for prelinkedkernels..."; $normal
 		path_pre="/mnt/osx/${mountpoint}"
 		path_post="/System/Library/PrelinkedKernels"
@@ -314,15 +334,20 @@ function do_kernel(){
 			if [ $nkernels -gt 0 ]; then
 				# Pick the first one, should be "prelinkedkernel"
 				kernel=$(ls -1 ${path} | head -n1)
-				if [ -f "${path}/${kernel}" ] && [ ! -f "${prefix}/${path_post}/${kernel}" ]; then
+				if [ -f "${path}/${kernel}" ]; then
 					$lgreen; echo "Found prelinkedkernel in ${mountpoint}"; $normal
-					cp -ar ${verbose} "${path}/${kernel}" "${prefix}/${path_post}/${kernel}"
+					if [ ! -f "${prefix}/${path_post}/${kernel}" ]; then
+						cp -ar ${verbose} "${path}/${kernel}" "${prefix}/${path_post}/${kernel}"
+					else
+						$lgreen; echo "Kernel found, copy not needed"; $normal
+					fi
 					result=0
 					break
 				fi
 			fi
 		fi
 
+		# No prelinked kernel found. Look for kernelcache
 		$white; echo "Searching for kernelcaches..."; $normal
 		path_post="/System/Library/Caches/com.apple.kext.caches/Startup"
 
@@ -332,31 +357,23 @@ function do_kernel(){
 			if [ $nkernels -gt 0 ]; then
 				# Pick the first one, should be "kernelcache"
 				kernel=$(ls -1 ${path} | head -n1)
-				if [ -f "${path}/${kernel}" ] && [ ! -f "${prefix}/${path_post}/${kernel}" ]; then
+				if [ -f "${path}/${kernel}" ]; then
 					$lgreen; echo "Found kernelcache in ${mountpoint}"; $normal
-					cp -ar ${verbose} "${path}/${kernel}" "${prefix}/${path_post}/${kernel}"
+					if [ ! -f "${prefix}/${path_post}/${kernel}" ]; then
+						cp -ar ${verbose} "${path}/${kernel}" "${prefix}/${path_post}/${kernel}"
+					else
+						$lgreen; echo "Kernel found, copy not needed"; $normal
+					fi
 					result=0
 					break
 				fi
 			fi
 		fi
-
-		$white; echo "Searching for mach_kernel..."; $normal
-		path_post="/mach_kernel"
-
-		path="${path_pre}/${path_post}"
-		if [ -f "${path}" ] && [ ! -f "${prefix}/${path_post}" ]; then
-			$lgreen; echo "Found mach_kernel in ${mountpoint}"; $normal
-			cp -ar ${verbose} "${path}" "${prefix}/${path_post}"
-			result=0
-			break
-		fi
-
 	done
 
 	$white; echo "Searching in installation packages..."; $normal
 
-	# Attempt pkg extraction
+	# Nothing found, try installation packages
 	if [ ! $result -eq 0 ]; then
 		local pkg_file
 		local kernel_path
@@ -379,7 +396,12 @@ function do_kernel(){
 		esac
 
 		if [ ! -z "${pkg_file}" ]; then
-			$lyellow; echo "Kernel found in ${pkg_file}, extracting..."; $normal
+			$lyellow; echo "Kernel found in ${pkg_file}"; $normal
+			if [ -f "${prefix}/${kernel_path}" ]; then
+				$lgreen; echo "Kernel found, copy not needed"; $normal
+				result=0
+				break
+			fi
 
 			local target_path
 			local mountpoint
