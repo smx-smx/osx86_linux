@@ -1,6 +1,6 @@
 #!/bin/bash
-source inc/colors.sh
-source inc/utils.sh
+source inc/[0-9]*colors.sh
+source inc/[0-9]*utils.sh
 
 export really_verbose=1
 

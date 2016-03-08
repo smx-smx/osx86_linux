@@ -16,6 +16,10 @@ function pause() {
 	fi
 }
 
+function git_getrev(){
+	echo $(git log --pretty=oneline 2>/dev/null | wc -l)
+}
+
 function md5_compare(){
 	local file1="$1"
 	local file2="$2"
@@ -68,4 +72,14 @@ function isEmpty() {
 	else
 		return 1 #bad, not empty
 	fi
+}
+
+
+function str_contains(){
+	local string="$1"
+	local search="$2"
+	if [[ $string == *"${search}"* ]]; then
+		return 0
+	fi
+	return 1
 }

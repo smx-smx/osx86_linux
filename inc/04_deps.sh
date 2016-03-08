@@ -13,7 +13,7 @@ function check_commands {
 	#	echo &>/dev/null
 	#else
 		commands=(
-			'grep' 'dd' 'sed'
+			'grep' 'dd' 'sed' 'blkid'
 			'parted' 'awk' 'mkfs.hfsplus'
 			'wget' 'dirname' 'basename'
 			'parted' 'pidof' 'gunzip'
@@ -106,7 +106,7 @@ function compile_darlingdmg(){
 		fi
 		mkdir "darling-dmg-${darling_dmgver}/build"
 		pushd "darling-dmg-${darling_dmgver}/build" &>/dev/null
-		if ! cmake cmake -DCMAKE_INSTALL_PREFIX:PATH="${scriptdir}/bins" ..; then
+		if ! cmake cmake -DCMAKE_INSTALL_PREFIX:PATH="${G_SCRIPTDIR}/bins" ..; then
 			err_exit "Configuration Failed!\n"
 		fi
 		if ! make; then
@@ -116,9 +116,9 @@ function compile_darlingdmg(){
 			err_exit "darling-dmg Install Failed\n"
 		fi
 		popd &>/dev/null
-		chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/darling-dmg-${darling_dmgver}.tar.gz"
+		chown "$SUDO_USER":"$SUDO_USER" "${G_SCRIPTDIR}/darling-dmg-${darling_dmgver}.tar.gz"
 		chown -R "$SUDO_USER":"$SUDO_USER" "darling-dmg-${darling_dmgver}"
-		mount_hfs="${scriptdir}/bins/bin/darling-dmg"
+		mount_hfs="${G_SCRIPTDIR}/bins/bin/darling-dmg"
 		if [ ! -f "$mount_hfs" ]; then
 			err_exit "darling-dmg Build Failed\n"
 		fi
@@ -142,7 +142,7 @@ function compile_kconfig(){
 			err_exit "Extraction failed\n"
 		fi
 		pushd "kconfig-frontends-${kconfigver}" &>/dev/null
-		./configure --prefix="$scriptdir/bins"
+		./configure --prefix="${G_SCRIPTDIR}/bins"
 		if ! make; then
 			err_exit "Kconfig Build Failed\n"
 		fi
@@ -150,9 +150,9 @@ function compile_kconfig(){
 			err_exit "Kconfig Install Failed\n"
 		fi
 		popd &>/dev/null
-		chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/kconfig-frontends-${kconfigver}.tar.xz"
-		chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/kconfig-frontends-${kconfigver}"
-		kconfig_mconf="${scriptdir}/bins/bin/kconfig-mconf"
+		chown "$SUDO_USER":"$SUDO_USER" "${G_SCRIPTDIR}/kconfig-frontends-${kconfigver}.tar.xz"
+		chown -R "$SUDO_USER":"$SUDO_USER" "${G_SCRIPTDIR}/kconfig-frontends-${kconfigver}"
+		kconfig_mconf="${G_SCRIPTDIR}/bins/bin/kconfig-mconf"
 		if [ ! -f "$kconfig_mconf" ]; then
 			err_exit "Kconfig Build Failed\n"
 		fi
@@ -188,7 +188,7 @@ function compile_xar(){
 			err_exit "Extraction failed\n"
 		fi
 		pushd "xar-${xarver}" &>/dev/null
-		./configure --prefix="$scriptdir/bins"
+		./configure --prefix="${G_SCRIPTDIR}/bins"
 		if ! make; then
 			err_exit "Xar Build Failed\n"
 		fi
@@ -196,9 +196,9 @@ function compile_xar(){
 			err_exit "Xar Install Failed\n"
 		fi
 		popd &>/dev/null
-		chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/xar-${xarver}.tar.gz"
-		chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/xar-${xarver}"
-		xar="${scriptdir}/bins/bin/xar"
+		chown "$SUDO_USER":"$SUDO_USER" "${G_SCRIPTDIR}/xar-${xarver}.tar.gz"
+		chown -R "$SUDO_USER":"$SUDO_USER" "${G_SCRIPTDIR}/xar-${xarver}"
+		xar="${G_SCRIPTDIR}/bins/bin/xar"
 		if [ ! -f "$xar" ]; then
 			err_exit "Xar Build Failed\n"
 		fi
@@ -208,10 +208,10 @@ function compile_xar(){
 function docheck_pbzx(){
 	if [ -z "$pbzx" ]; then
 		$lyellow; echo "Compiling pbzx..."; $normal
-		if ! gcc -Wall -pedantic "${scriptdir}/pbzx.c" -o "${scriptdir}/bins/bin/pbzx"; then
+		if ! gcc -Wall -pedantic "${G_SCRIPTDIR}/pbzx.c" -o "${G_SCRIPTDIR}/bins/bin/pbzx"; then
 			err_exit "pbzx Build Failed\n"
 		fi
-		pbzx="${scriptdir}/bins/bin/pbzx"
+		pbzx="${G_SCRIPTDIR}/bins/bin/pbzx"
 	fi
 }
 
@@ -224,27 +224,26 @@ function docheck_dmg2img(){
 		if [ ! "$d2iver" == "$dmgimgversion" ] && [ "$dmg2img" == "dmg2img" ]; then
 			$lyellow; echo "WARNING! dmg2img is not updated and may cause problems"
 			echo "Detected version: "$d2iver""
-			echo "Recommanded version: "$dmgimgversion""
-			read -p "Compile version "$dmgimgversion"? (y/n)" -n1 -r
-			echo; $normal
-			if [[ $REPLY =~ ^[Yy]$ ]];then
+			echo "Recommanded version: ${dmgimgversion}"
+			if read_yn "Compile version ${dmgimgversion}?"; then
 				$lyellow; echo "Compiling dmg2img..."; $normal
 				compile_d2i
 			fi
+			$normal
 		fi
 	fi
 }
 
 function compile_d2i(){
-	if [ ! -f "dmg2img-"$dmgimgversion".tar.gz" ]; then
-		if ! wget "http://vu1tur.eu.org/tools/dmg2img-"$dmgimgversion".tar.gz"; then
+	if [ ! -f "dmg2img-${dmgimgversion}.tar.gz" ]; then
+		if ! wget "http://vu1tur.eu.org/tools/dmg2img-${dmgimgversion}.tar.gz"; then
 			err_exit "Download failed\n"
 		fi
 	fi
-	if [ ! -d "dmg2img-"$dmgimgversion"" ]; then
-		rm -r "dmg2img-"$dmgimgversion""
+	if [ ! -d "dmg2img-${dmgimgversion}" ]; then
+		rm -r "dmg2img-${dmgimgversion}"
 	fi
-	if ! tar xvf "dmg2img-"$dmgimgversion".tar.gz"; then
+	if ! tar xvf "dmg2img-${dmgimgversion}.tar.gz"; then
 		err_exit "Extraction failed\n"
 	fi
 	pushd "dmg2img-${dmgimgversion}" &>/dev/null
@@ -254,14 +253,14 @@ function compile_d2i(){
 		$white; echo "sudo apt-get build-dep dmg2img"; $normal
 		err_exit ""
 	fi
-	if ! DESTDIR="${scriptdir}/bins" make install; then
+	if ! DESTDIR="${G_SCRIPTDIR}/bins" make install; then
 		err_exit "dmg2img Install Failed\n"
 	fi
-	cp -Ra ${scriptdir}/bins/usr/* "${scriptdir}/bins/"
-	rm -rf ${scriptdir}/bins/usr
-	chown "$SUDO_USER":"$SUDO_USER" "${scriptdir}/dmg2img-${dmgimgversion}.tar.gz"
-	chown -R "$SUDO_USER":"$SUDO_USER" "${scriptdir}/dmg2img-${dmgimgversion}"
-	dmg2img="${scriptdir}/bins/bin/dmg2img"
+	cp -Ra ${G_SCRIPTDIR}/bins/usr/* "${G_SCRIPTDIR}/bins/"
+	rm -rf ${G_SCRIPTDIR}/bins/usr
+	chown "$SUDO_USER":"$SUDO_USER" "${G_SCRIPTDIR}/dmg2img-${dmgimgversion}.tar.gz"
+	chown -R "$SUDO_USER":"$SUDO_USER" "${G_SCRIPTDIR}/dmg2img-${dmgimgversion}"
+	dmg2img="${G_SCRIPTDIR}/bins/bin/dmg2img"
 	if [ ! -f "$dmg2img" ]; then
 		err_exit "dmg2img Build Failed\n"
 	fi

@@ -1,37 +1,37 @@
 #!/bin/bash
 function mediamenu(){
-	mediamenu=1
-	if [ $virtualdev == 1 ]; then
-		if [ $nbd0_mapped -eq 0 ]; then
-			$white; echo "Mapping ${in_arg}..."; $normal
-			if ! qemu_map "nbd0" "$in_arg"; then
-				err_exit "Can't map ${in_arg}\n"
+	G_MEDIAMENU=1
+	if [ ${G_VIRTUALDEV} -eq 1 ]; then
+		if [ ${G_NBD0_MAPPED} -eq 0 ]; then
+			$white; echo "Mapping ${G_IN_ARG}..."; $normal
+			if ! qemu_map "0" "${G_IN_ARG}"; then
+				err_exit "Can't map ${G_IN_ARG}\n"
 			fi
-			dev_target="/dev/nbd0"
-      if [ $virtualdev -eq 1 ]; then
-        dev_target="${dev_target}p1"
-      else
-        dev_target="${dev_target}1"
-      fi
+			G_DEV_TARGET="${G_DEV_NBD0}"
+      		if [ ${G_VIRTUALDEV} -eq 1 ]; then
+		        G_DEV_TARGET="${G_DEV_TARGET}p1"
+      		else
+		        G_DEV_TARGET="${G_DEV_TARGET}1"
+      		fi
 		fi
-		if [ ! -b "/dev/nbd0p1" ]; then
+		if [ ! -b "${G_DEV_NBD0}p1" ]; then
 			err_exit "Corrupted image\n"
 		fi
 	fi
 
-	if ! grep -q "/mnt/osx/target" /proc/mounts; then
+	if ! grep -q "${G_MOUNTP_TARGET}" /proc/mounts; then
 		$yellow; echo "Mounting..."; $normal
-		if ! mount_part "$dev_target" "target" "silent"; then
+		if ! mount_part "${G_DEV_TARGET}" "${G_NAME_TARGET}" "silent"; then
 			err_exit "Cannot mount target\n"
 		else
 			$lgreen; echo "Target Mounted"; $normal
 		fi
-		if [ ! -d /mnt/osx/target/Extra ]; then
-			mkdir -p /mnt/osx/target/Extra/Extensions
+		if [ ! -d "${G_MOUNTP_TARGET}/Extra" ]; then
+			mkdir ${G_VERBOSE} -p "${G_MOUNTP_TARGET}/Extra"
 		fi
 		detect_osx_version
 	fi
-	echo "Working on ${dev_target}"
+	echo "Working on ${G_DEV_TARGET}"
 	echo "Choose an operation..."
 	echo "1  - Manage kexts"
 	echo "2  - Manage chameleon Modules"
@@ -70,7 +70,7 @@ function mediamenu(){
 			mediamenu
 			;;
 		5)
-			do_kernel "target"
+			do_kernel "${G_NAME_TARGET}"
 			mediamenu
 			;;
 		6)
@@ -90,26 +90,22 @@ function mediamenu(){
 			;;
 		9)
 			do_cleanup
-			if [ $virtualdev == 1 ]; then
-				$lred; echo "WARNING: You are about to delete ${in_arg} content!"
-				read -p "Are you really sure you want to continue? (y/n)" -n1 -r
-				echo; $normal
-				if [[ $REPLY =~ ^[Nn]$ ]];then
+			if [ ${G_VIRTUALDEV} -eq 1 ]; then
+				$lred; echo "WARNING: You are about to delete ${G_IN_ARG} content!"
+				if ! read_yn "Are you really sure you want to continue?"; then
 					err_exit ""
 				fi
-				rm "${in_arg}"
-				$lgreen; echo "$(basename $in_arg) succesfully deleted" ; $normal
+				rm "${G_IN_ARG}"
+				$lgreen; echo "$(basename ${G_IN_ARG}) succesfully deleted" ; $normal
 				#else
 				#	echo "Can't delete image"
 			else
-				$lred; echo "WARNING: You are about to erase ${dev_target}!"
-				read -p "Are you really sure you want to continue? (y/n)" -n1 -r
-				echo; $normal
-				if [[ $REPLY =~ ^[Nn]$ ]];then
+				$lred; echo "WARNING: You are about to erase ${G_DEV_TARGET}!"
+				if ! read_yn "Are you really sure you want to continue?"; then
 					err_exit ""
 				fi
-					dd if=/dev/zero of="${dev_target}" bs=512 count=1
-					$lgreen: echo echo "${dev_target} succesfully erased"; $normal
+				dd if=/dev/zero of="${G_DEV_TARGET}" bs=512 count=1
+				$lgreen: echo echo "${G_DEV_TARGET} succesfully erased"; $normal
 			fi
 			err_exit ""
 			;;
@@ -144,17 +140,17 @@ function fileChooser(){
 
   $white; echo "0 - Return to main menu"; $normal
 
-  local install_dir
+  local install_dir="${G_MOUNTP_TARGET}"
 
   case $dir in
     */kernels)
-      install_dir="/mnt/osx/target";
+      install_dir="${install_dir}/";
       ;;
     */extra_kexts)
-      install_dir="/mnt/osx/target/Extra/Extensions"
+      install_dir="${install_dir}/Extra/Extensions"
       ;;
     */chameleon/Modules)
-      install_dir="/mnt/osx/target/Extra/Modules"
+      install_dir="${install_dir}/Extra/Modules"
       ;;
   esac
 
@@ -215,17 +211,17 @@ function fileChooser(){
 }
 
 function tweakmenu(){
-  fileChooser "${scriptdir}/tweaks" "*.sh" "f"
+  fileChooser "${G_TWEAKSDIR}" "*.sh" "f"
 }
 
 function kextmenu(){
-  fileChooser "${scriptdir}/extra_kexts" "*.kext" "d"
+  fileChooser "${G_KEXTDIR}" "*.kext" "d"
 }
 
 function chammodmenu(){
-  fileChooser "${scriptdir}/chameleon/Modules" "*.dylib" "f"
+  fileChooser "${G_CHAMELEONDIR}/Modules" "*.dylib" "f"
 }
 
 function kernelmenu(){
-  fileChooser "${scriptdir}/kernels" "*" "f"
+  fileChooser "${G_KERNDIR}" "*" "f"
 }

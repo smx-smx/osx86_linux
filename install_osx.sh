@@ -1,30 +1,14 @@
 #!/bin/bash
-rev=$(git log --pretty=oneline 2>/dev/null | wc -l)
-if [ $rev -gt 0 ]; then
-	program_revision="git r$rev"
-else
-	program_revision="git"
-fi
+# These 2 variables need to be defined before we include the rest
+G_WORKDIR=$(pwd -P)
+G_SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P)"
+cd $G_SCRIPTDIR
 
-verbose=""
-if [ -z $log_mode ]; then
-	log_mode=0
-fi
-if [ -z $really_verbose ]; then
-	really_verbose=0
-elif [ $really_verbose -eq 1 ]; then
-	verbose="-v"
-fi
-
-trap err_exit SIGINT
-
-workdir=$(pwd -P)
-scriptdir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P)"
-cd $scriptdir
-
-for i in $scriptdir/inc/*.sh; do
+for i in $G_SCRIPTDIR/inc/*.sh; do
 	source "$i"
 done
+
+trap err_exit SIGINT
 
 function do_cleanup(){
 	local result
@@ -46,31 +30,35 @@ function do_cleanup(){
 
 function cleanup() {
 	sync
-	if [ ! "${scriptdir}/tmp" == "/tmp" ] && [ -d "${scriptdir}/tmp" ]; then
-		rm -r "${scriptdir}/tmp"
+	if [ ! "${G_TMPDIR}" == "/tmp" ] && [ -d "${G_TMPDIR}" ]; then
+		rm -r "${G_TMPDIR}/*"
 	fi
 
 	local result=0
 	if [ -d /mnt/osx ]; then
 		for mountpoint in esp base esd target; do
 			while grep -q "$mountpoint" /proc/mounts; do
-				$yellow; echo "umount /mnt/osx/${mountpoint}"; $normal
-				if ! umount "/mnt/osx/${mountpoint}"; then
+				$yellow; echo "umount ${G_MOUNTS_DIR}/${mountpoint}"; $normal
+				if ! umount "${G_MOUNTS_DIR}/${mountpoint}"; then
 					sleep 1
 				fi
 				result=$?
 			done
-			if [ -d "/mnt/osx/${mountpoint}" ] && isEmpty "/mnt/osx/${mountpoint}"; then
-				rmdir "/mnt/osx/${mountpoint}"
+			if [ -d "${G_MOUNTS_DIR}/${mountpoint}" ] && isEmpty "${G_MOUNTS_DIR}/${mountpoint}"; then
+				rmdir "${G_MOUNTS_DIR}/${mountpoint}"
 			else
 				result=1
 			fi
 		done
 
-		if isEmpty "/mnt/osx"; then
-			rmdir /mnt/osx
+		if isEmpty "${G_MOUNTS_DIR}"; then
+			rmdir "${G_MOUNTS_DIR}"
 		else
-			$lyellow; echo "Some partitions couldn't be unmounted. Check what's accessing them and unmount them manually"; $normal
+			$lyellow
+			echo "${G_MOUNTS_DIR} is not empty!"
+			echo "Some partitions couldn't be unmounted. Check what's accessing them and unmount them manually"
+			$normal
+
 			result=1
 		fi
 	fi
@@ -115,20 +103,20 @@ function main(){
 	$lpurple; printf "X\n"
 	$normal
 
-	echo "Version: $program_revision"
+	echo "Version: ${G_REV}"
 
 	if [ -z $SUDO_USER ]; then
 		export SUDO_USER="root"
 	fi
 
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${scriptdir}/bins/lib
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${G_SCRIPTDIR}/bins/lib
 
 	check_commands	#check that all required commands exist
-	find_cmd "xar" "${scriptdir}/bins/bin"
-	find_cmd "dmg2img" "${scriptdir}/bins/bin"
-	find_cmd "pbzx" "${scriptdir}/bins/bin"
-	find_cmd "kconfig_mconf" "${scriptdir}/bins/bin" "kconfig-mconf"
-	find_cmd "mount_hfs" "${scriptdir}/bins/bin" "darling-dmg"
+	find_cmd "xar" "${G_SCRIPTDIR}/bins/bin"
+	find_cmd "dmg2img" "${G_SCRIPTDIR}/bins/bin"
+	find_cmd "pbzx" "${G_SCRIPTDIR}/bins/bin"
+	find_cmd "kconfig_mconf" "${G_SCRIPTDIR}/bins/bin" "kconfig-mconf"
+	find_cmd "mount_hfs" "${G_SCRIPTDIR}/bins/bin" "darling-dmg"
 
 	if [ $# == 0 ] ||
 	[ "$1" == "-h" ] ||
@@ -141,16 +129,16 @@ function main(){
 		err_exit ""
 	fi
 
-	in_arg="$1"
-	out_arg="$2"
+	G_IN_ARG="$1"
+	G_OUT_ARG="$2"
 
-	local name=$(basename "$1" 2>/dev/null) #input
-	in_ext=".${name##*.}"
-	in_name="${name%.*}"
+	local name=$(basename "${G_IN_ARG}" 2>/dev/null) #input
+	G_IN_EXT=".${name##*.}"
+	G_IN_NAME="${name%.*}"
 
-	name=$(basename "$2") #output
-	out_ext=".${name##*.}"
-	out_name="${name%.*}"
+	name=$(basename "${G_OUT_ARG}") #output
+	G_OUT_EXT=".${name##*.}"
+	G_OUT_NAME="${name%.*}"
 	unset name
 
 	docheck_kconfig
@@ -198,39 +186,26 @@ function main(){
 		exit 0
 	fi
 
-	kextdir="${scriptdir}/extra_kexts"
-	kerndir="${scriptdir}/kernels"
-	filepath="$( cd "$( dirname "$in_arg" 2>/dev/null)" && pwd -P)"
-	devpath="$( cd "$( dirname "$out_arg" 2>/dev/null)" && pwd -P)"
+	
+	G_IN_PATH="$( cd "$( dirname "${G_IN_ARG}" 2>/dev/null)" && pwd -P)"
+	G_OUT_PATH="$( cd "$( dirname "${G_OUT_ARG}" 2>/dev/null)" && pwd -P)"
 
 	do_cleanup || exit 1
 
 	# Create working dir
-	if [ ! -d /mnt/osx ]; then mkdir -p /mnt/osx; fi
+	if [ ! -d "${G_MOUNTS_DIR}" ]; then mkdir -p "${G_MOUNTS_DIR}"; fi
 	# Create ESP mountpoint
-	if [ ! -d /mnt/osx/esp ]; then mkdir /mnt/osx/esp; fi
+	if [ ! -d "${G_MOUNTP_ESP}" ]; then mkdir "${G_MOUNTP_ESP}"; fi
 	# Create ESD mountpoint
-	if [ ! -d /mnt/osx/esd ]; then mkdir /mnt/osx/esd; fi
+	if [ ! -d "${G_MOUNTP_ESD}" ]; then mkdir "${G_MOUNTP_ESD}"; fi
 	# Create BaseSystem mountpoint
-	if [ ! -d /mnt/osx/base ]; then mkdir /mnt/osx/base; fi
+	if [ ! -d "${G_MOUNTP_BASE}" ]; then mkdir "${G_MOUNTP_BASE}"; fi
 	# Create target mountpoint
-	if [ ! -d /mnt/osx/target ]; then mkdir /mnt/osx/target; fi
-
-	nbd0_mapped=0
-	nbd1_mapped=0
-	nbd2_mapped=0
-	mediamenu=0
+	if [ ! -d "${G_MOUNTP_TARGET}" ]; then mkdir "${G_MOUNTP_TARGET}"; fi
 
 	do_init_qemu
 
-	dev_esd=""
-	dev_base=""
-	dev_target=""
-	dev_esp=""
-	size=$3 #for img creation
-
-	virtualdev=0
-	vbhdd=0
+	G_IMAGESIZE=$3 #for img creation
 
 	if [[ ! "$OSTYPE" == linux* ]]; then
 		err_exit "This script can only be run under Linux\n"
@@ -240,65 +215,89 @@ function main(){
 	   err_exit "This script must be run as root\n"
 	fi
 
-	mkrecusb=0
-	if [ -b "$in_arg" ] &&
-		[ ! -f "$in_arg" ] &&
-		[ ! -d "$in_arg" ] &&
-		[ -z "$out_arg" ] &&
+	if [ -b "${G_IN_ARG}" ] &&
+		[ ! -f "${G_IN_ARG}" ] &&
+		[ ! -d "${G_IN_ARG}" ] &&
+		[ -z "${G_OUT_ARG}" ] &&
 		[ -z "$3" ]
 	then #./install_osx.sh [dev]
 		dev_target="$in_arg"
 		mediamenu
-	elif [ -f "$in_arg" ] && [ -z "$out_arg" ] && [ -z "$3" ]; then #./install_osx.sh [file]
-		if [ "$in_ext" == ".dmg" ]; then #./install_osx.sh [file.dmg]
+	elif [ -f "${G_IN_ARG}" ] && [ -z "${G_OUT_ARG}" ] && [ -z "$3" ]; then #./install_osx.sh [file]
+		if [ "${G_IN_EXT}" == ".dmg" ]; then #./install_osx.sh [file.dmg]
 			usage
 			err_exit "You must specify a valid target drive or image\n"
-		elif [ "$in_ext" == ".img" ] ||
-			[ "$in_ext" == ".hdd" ] ||
-			[ "$in_ext" == ".vhd" ] ||
-			[ "$in_ext" == ".vdi" ] ||
-			[ "$in_ext" == ".vmdk" ]
+		elif [ "${G_IN_EXT}" == ".img" ] ||
+			[ "${G_IN_EXT}" == ".hdd" ] ||
+			[ "${G_IN_EXT}" == ".vhd" ] ||
+			[ "${G_IN_EXT}" == ".vdi" ] ||
+			[ "${G_IN_EXT}" == ".vmdk" ]
 		then #./install_osx.sh [file.img]
-			virtualdev=1
-			mediamenu
+			G_VIRTUALDEV=1
 		fi
-	elif [ ! -b "$in_arg" ] &&
-		[ ! -f "$in_arg" ] &&
-		[ ! -d "$in_arg" ] &&
-		[ -z "$out_arg" ] &&
+	elif [ ! -b "${G_IN_ARG}" ] &&
+		[ ! -f "${G_IN_ARG}" ] &&
+		[ ! -d "${G_IN_ARG}" ] &&
+		[ -z "${G_OUT_ARG}" ] &&
 		[ -z "$3" ]
 	then
 		err_exit "No such device\n"
 	fi
 
-	if [ ! "$in_ext" == ".dmg" ] && [ ! "$in_ext" == ".img" ]; then
+	local img_ext
+	if [ ${G_VIRTUALDEV} -eq 1 ]; then
+		img_ext="${G_IN_EXT}"
+	else
+		img_ext="${G_OUT_EXT}"
+	fi
+
+	case "${img_ext}" in
+		.vdi)
+			G_DISKFMT="vdi"
+			;;
+		.vhd)
+			G_DISKFMT="vhd"
+			;;
+		.vmdk)
+			G_DISKFMT="vmdk"
+			;;
+		.hdd|.img)
+			G_DISKFMT="raw"
+			;;
+	esac
+
+	if [ ${G_VIRTUALDEV} -eq 1 ]; then	
+		mediamenu
+	fi
+
+	if [ ! "${G_IN_EXT}" == ".dmg" ] && [ ! "${G_IN_EXT}" == ".img" ]; then
 			if [ "$1" == "--mkchameleon" ]; then
-				mkrecusb=1
+				G_MKRESCUEUSB=1
 			else
 				usage
 				err_exit "Invalid file specified\n"
 			fi
 	fi
 
-	if [ -z "$out_arg" ]; then
+	if [ -z "${G_OUT_ARG}" ]; then
 		usage
 		err_exit "You must specify a valid target drive or image\n"
 	fi
 
-	if [ ! -b "$out_arg" ]; then
-		if [ "$out_ext" == ".img" ] ||
-			[ "$out_ext" == ".hdd" ] ||
-			[ "$out_ext" == ".vhd" ] ||
-			[ "$out_ext" == ".vdi" ] ||
-			[ "$out_ext" == ".vmdk" ]
+	if [ ! -b "${G_OUT_ARG}" ]; then
+		if [ "${G_OUT_EXT}" == ".img" ] ||
+			[ "${G_OUT_EXT}" == ".hdd" ] ||
+			[ "${G_OUT_EXT}" == ".vhd" ] ||
+			[ "${G_OUT_EXT}" == ".vdi" ] ||
+			[ "${G_OUT_EXT}" == ".vmdk" ]
 		then
-			vdev_check "$out_arg" #switch to Virtual HDD mode & check
+			vdev_check #switch to Virtual HDD mode & check
 		fi
 	fi
 
-	dev_target="$out_arg"
+	G_DEV_TARGET="${G_OUT_ARG}"
 
-	if [[ $in_arg == "/dev/sr[0-9]" ]]; then
+	if [[ ${G_IN_ARG} == "/dev/sr[0-9]" ]]; then
 		$lgreen; echo "CD Source Device Detected"; $normal
 		if [ -z "$out_arg" ]; then
 			err_exit "You must specify a valid destination to create an img file\n"
@@ -307,95 +306,100 @@ function main(){
 		else
 			$yellow; echo "Image creation is in progress..."
 			echo "The process may take some time"; $normal
-			if [ ! -d "$(dirname "$out_arg")" ] && ! mkdir -p "$(dirname "$out_arg")"; then
+			if [ ! -d "$(dirname "${G_OUT_ARG}")" ] && ! mkdir -p "$(dirname "${G_OUT_ARG}")"; then
 				err_exit "Can't create destination folder\n"
 			fi
-			dd if="$in_arg" of="$out_arg"
+			dd if="${G_IN_ARG}" of="${G_OUT_ARG}"
 			watch -n 10 kill -USR1 `pidof dd`
 		fi
 	fi
 
 	do_preptarget
-	if [ $mkrecusb -eq 1 ]; then
+	if [ ${G_MKRESCUEUSB} -eq 1 ]; then
 		do_finalize
 		err_exit ""
 	fi
 
 	if is_on DRV_HFSPLUS; then
-		if is_on DEP_DMG2IMG; then
-			outfile="${filepath}/${in_name}.img"
-			if [ ! -e "${outfile}" ]; then
-				echo "Converting ${in_arg} to img..."
-				if ! $dmg2img "${in_arg}" "${outfile}" || [ ! -f "${outfile}" ]; then
-					rm "$outfile"
+		local outfile="${G_IN_PATH}/${G_IN_NAME}.img"
+		if [ ! -e "${outfile}" ]; then
+			if is_on DEP_DMG2IMG; then
+				echo "Converting ${G_IN_ARG} to img..."
+				if ! $dmg2img "${G_IN_ARG}" "${outfile}" || [ ! -f "${outfile}" ]; then
+					rm "${outfile}"
 					err_exit "Img conversion failed\n"
 				fi
+			else
+				err_exit "Enable dmg2img to convert to img!\n"
 			fi
 		fi
 
-		$lyellow; echo "Mapping esd ($outfile) with qemu..."; $normal
-		if [ ! $nbd1_mapped == 1 ]; then
-			if ! qemu_map "nbd1" "${outfile}"; then
+		$lyellow; echo "Mapping ${G_NAME_ESD} ($outfile) with qemu..."; $normal
+		if [ ${G_NBD1_MAPPED} -eq 0 ]; then
+			if ! qemu_map "1" "${outfile}"; then
 				err_exit "Error during image mapping\n"
 			fi
 		fi
-		dev_esd="/dev/nbd1"
+		G_DEV_ESD="${G_DEV_NBD1}"
 	else #DRV_HFSPLUS
-		dev_esd="${in_arg}" #Take the esd as is (darling-dmg)
+		G_DEV_ESD="${G_IN_ARG}" #Take the esd as is (darling-dmg)
 	fi
 
 	$yellow; echo "Mounting Partitions..."; $normal
 
 	if is_on DRV_HFSPLUS; then
-		for partition in 2 3; do
-				if mount_part "${dev_esd}p${partition}" "esd"; then
-					dev_esd="${dev_esd}p${partition}"
-					break
-				fi
-		done
-		if [ "${dev_esd}" == "/dev/nbd1" ]; then
-			err_exit "Cannot mount esd\n"
+		# Try to mount ESD
+		local part_dev=$(find_first_hfsplus_part "${G_DEV_ESD}")
+		if [ -z "${part_dev}" ]; then
+			err_exit "Cannot find a valid hfsplus partition in ${G_NAME_ESD}"
 		fi
-	elif ! mount_part "${dev_esd}" "esd"; then #DRV_HFSPLUS
-		err_exit "Cannot mount esd\n"
+		if ! mount_part "${part_dev}" "${G_NAME_ESD}"; then
+			err_exit "Cannot mount ${G_NAME_ESD}\n"
+		fi
+		G_DEV_ESD="${part_dev}"
+	elif ! mount_part "${G_DEV_ESD}" "${G_NAME_ESD}"; then #DRV_DARLINGDMG
+		err_exit "Cannot mount ${G_NAME_ESD}\n"
 	fi
 
 	if is_splitted; then
 		if is_on DRV_HFSPLUS; then
-			if is_on DEP_DMG2IMG; then
-				outfile="${filepath}/BaseSystem.img"
-				if [ ! -e "${outfile}" ]; then
-					echo "Converting BaseSystem.dmg..."
-					if ! $dmg2img "/mnt/osx/esd/BaseSystem.dmg" "${outfile}" || [ ! -f "${outfile}" ]; then
-						rm "$outfile"
+			local outfile="${G_IN_PATH}/BaseSystem.img"
+			if [ ! -e "${outfile}" ]; then
+				if is_on DEP_DMG2IMG; then
+					echo "Converting BaseSystem.dmg to img..."
+					if ! $dmg2img "${G_MOUNTP_ESD}/BaseSystem.dmg" "${outfile}" || [ ! -f "${outfile}" ]; then
+						rm "${outfile}"
 						err_exit "Img conversion failed\n"
 					fi
+				else
+					err_exit "Enable dmg2img to convert to img!\n"
 				fi
 			fi
 
-			$lyellow; echo "Mapping BaseSystem ($outfile} with qemu..."; $normal
+			$lyellow; echo "Mapping ${G_NAME_BASE} ($outfile} with qemu..."; $normal
 			if [ ! $nbd2_mapped == 1 ]; then
-				if ! qemu_map "nbd2" "${outfile}"; then
+				if ! qemu_map "2" "${outfile}"; then
 					err_exit "Error during BaseSystem mapping\n"
 				fi
 			fi
-			dev_base="/dev/nbd2"
-		else #DRV_HFSPLUS
-			dev_base="/mnt/osx/esd/BaseSystem.dmg"
+			G_DEV_BASE="${G_DEV_NBD2}"
+		else #DRV_DARLINGDMG
+			G_DEV_BASE="${G_MOUNTP_ESD}/BaseSystem.dmg"
 		fi
 
+
 		if is_on DRV_HFSPLUS; then
-			for partition in 2 3; do
-					if mount_part "${dev_base}p${partition}" "base"; then
-						dev_base="${dev_esd}p${partition}"
-						break
-					fi
-			done
-			if [ "${dev_base}" == "/dev/nbd2" ]; then
-				err_exit "Cannot mount basesystem\n"
+			# Try to mount ESD
+			local part_dev=$(find_first_hfsplus_part "${G_DEV_BASE}")
+			if [ -z "${part_dev}" ]; then
+				err_exit "Cannot find a valid hfsplus partition in ${G_NAME_BASE}"
 			fi
-		elif ! mount_part "${dev_base}" "base"; then
-			err_exit "Cannot mount basesystem\n"
+			if ! mount_part "${part_dev}" "${G_NAME_BASE}"; then
+				err_exit "Cannot mount ${G_NAME_BASE}\n"
+			fi
+			G_DEV_ESD="${part_dev}"
+		elif ! mount_part "${G_DEV_BASE}" "${G_NAME_BASE}"; then #DRV_DARLINGDMG
+			err_exit "Cannot mount ${G_NAME_BASE}\n"
 		fi
 	fi
 	detect_osx_version
@@ -413,19 +417,6 @@ function main(){
 	sync
 	do_cleanup
 	$lgreen; echo "All Done!"; $normal
-	if [ $virtualdev == 1 ] && [ "$out_ext" == ".img" ] || [ "$out_ext" == ".hdd" ]; then
-		if read_yn "Do you want to convert virtual image to a VDI file?"; then
-			if ! vboxmanage convertdd  "${out_arg}" "${devpath}/${out_name}.vdi" || [ ! -f "${devpath}/${out_name}.vdi" ]; then
-				err_exit "Conversion Failed\n"
-			else
-				chmod 666 "$devpath/$dfilename".vdi
-				chown "$SUDO_USER":"$SUDO_USER" "$devpath/$dfilename".vdi
-				if read_yn "Do you want to delete the img file?"; then
-					rm ${verbose} "${out_arg}"
-				fi
-			fi
-		fi
-	fi
 	exit 0
 }
 

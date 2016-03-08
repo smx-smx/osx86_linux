@@ -1,13 +1,13 @@
 #!/bin/bash
 function load_config(){
-  if [ ! -f "${scriptdir}/.config" ]; then
+  if [ ! -f "${G_SCRIPTDIR}/.config" ]; then
     $lred
     echo "osx86_linux not configured!"
     echo "Run Kconfig first and try again"
     $normal
     err_exit ""
   fi
-  eval $(cat "${scriptdir}/.config" | grep -v "^#")
+  eval $(cat "${G_SCRIPTDIR}/.config" | grep -v "^#")
 }
 
 function is_on(){
