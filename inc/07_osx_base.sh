@@ -428,6 +428,7 @@ function do_kernel(){
 					else
 						cp -ar ${verbose} "${path}/${kernel}" "${prefix}/${path_post}/${kernel}"
 					fi
+					G_KEEP_KEXTCACHE=1
 					result=0
 					break
 				fi

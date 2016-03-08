@@ -82,6 +82,9 @@ G_GPT="gpt"
 
 G_MKRESCUEUSB=0
 
+# Keep existing kernelcache?
+G_KEEP_KEXTCACHE=0
+
 # Devices Paths
 G_DEV_ESP=""
 G_DEV_ESD=""

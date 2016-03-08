@@ -423,8 +423,10 @@ function main(){
 function do_finalize(){
 	# Install any additional kext
 	do_kexts
-	# Remove the existing caches
-	do_remcache
+	# Remove the existing cache, but only if that's not the only usable kernel
+	if [ ${G_KEEP_KEXTCACHE} -eq 0 ]; then
+		do_remcache
+	fi
 	# Repair kext permissions
 	do_kextperms
 	# Install the bootloader
