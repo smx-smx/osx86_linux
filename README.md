@@ -1,5 +1,7 @@
 #osx86_linux
 
+[![Join the chat at https://gitter.im/smx-smx/osx86_linux](https://badges.gitter.im/smx-smx/osx86_linux.svg)](https://gitter.im/smx-smx/osx86_linux?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 osx86_linux is a script aimed at people who want to try OS X (hackintosh, but also vanilla pendrive preparation will be possible in the future), but don't have a real MAC to prepare the usb installer, or have a CPU that doesn't support 
 virtualization.
 
