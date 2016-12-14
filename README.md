@@ -34,6 +34,10 @@ For QT Configuration support
 
 `apt-get install libqt4-dev`
 
+
+![alt kconfig-gconf](https://raw.githubusercontent.com/smx-smx/osx86_linux/master/doc/gconf.png)
+
+
 ##### darling-dmg
 `apt-get install cmake libfuse-dev libssl-dev libicu-dev zlib1g-dev libbz2-dev`
 
