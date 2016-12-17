@@ -47,27 +47,7 @@ function isVirtual(){
 }
 
 function get_part(){
-	local dev="$1"
-	local partno=$2
-
-	#if it's a link, follow it
-	dev=$(readlink -f "${dev}")
-
-	local dev_major=$((0x$(stat -c "%t" "${dev}")))
-	#local dev_minor=$((0x$(stat -c "%T" "${dev}")))
-
-	# Device minor is always 0 for devices, N for the Nth partition
-	local sysfs_node="/sys/dev/block/${dev_major}:${partno}"
-	if [ -d "${sysfs_node}" ] &&
-		[ -f "${sysfs_node}/partition" ] &&
-		[ $(cat "${sysfs_node}/partition") -eq 1 ] &&
-		[ -e "/dev/block/${dev_major}:${partno}" ]
-	then
-		local dev_part=$(readlink -f "/dev/block/${dev_major}:${partno}")
-		echo "${dev_part}"
-		return 0
-	fi
-	return 1
+	err_exit "Temporarly removed"
 }
 
 function vdev_check(){
