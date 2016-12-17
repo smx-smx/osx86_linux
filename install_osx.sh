@@ -132,7 +132,7 @@ function main(){
 	G_IN_ARG="$1"
 	G_OUT_ARG="$2"
 
-	local name=$(basename "${G_IN_ARG}" 2>/dev/null) #input
+	local name=$(basename "${G_IN_ARG}") #input
 	G_IN_EXT=".${name##*.}"
 	G_IN_NAME="${name%.*}"
 
@@ -186,9 +186,11 @@ function main(){
 		exit 0
 	fi
 
+	G_IN_PATH="$( cd "$( dirname "${G_IN_ARG}" )" && pwd -P)"
+	G_OUT_PATH="$( cd "$( dirname "${G_OUT_ARG}" )" && pwd -P)"
 	
-	G_IN_PATH="$( cd "$( dirname "${G_IN_ARG}" 2>/dev/null)" && pwd -P)"
-	G_OUT_PATH="$( cd "$( dirname "${G_OUT_ARG}" 2>/dev/null)" && pwd -P)"
+	[ -z "${G_IN_PATH}" ] && err_exit "Cannot resolve absolute path for input \"${G_IN_ARG}\"\n"
+	[ -z "${G_OUT_PATH}" ] && err_exit "Cannot resolve absolute path for output \"${G_OUT_ARG}\"\n"
 
 	do_cleanup || exit 1
 
