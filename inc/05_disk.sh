@@ -1,39 +1,19 @@
 #!/bin/bash
 function isRO(){
 	local dev="$1"
-	#if it's a link, follow it
-	dev=$(readlink -f "${dev}")
-
-	local dev_major=$((0x$(stat -c "%t" "${dev}")))
-	local dev_minor=$((0x$(stat -c "%T" "${dev}")))
-	if [ ! -f "/sys/dev/block/${dev_major}:${dev_minor}/ro" ]; then
-		err_exit "Can't get readonly flag\n"
-	fi
-	local isRO=$(cat /sys/dev/block/${dev_major}:${dev_minor}/ro)
-	return $((${isRO} ^ 1))
+	local isRO=$((! $(trim "$(lsblk "${dev}" -prno RO)")))
+	return $isRO
 }
 
 function isRemovable(){
 	local dev="$1"
-	#if it's a link, follow it
-	dev=$(readlink -f "${dev}")
-
-	local dev_major=$((0x$(stat -c "%t" "${dev}")))
-	local dev_minor=$((0x$(stat -c "%T" "${dev}")))
-	if [ ! -f "/sys/dev/block/${dev_major}:${dev_minor}/removable" ]; then
-		err_exit "Can't get removable flag\n"
-	fi
-	local isRemovable=$(cat "/sys/dev/block/${dev_major}:${dev_minor}/removable")
-	return $((${isRemovable} ^ 1))
+	local isRemovable=$((! $(trim "$(lsblk "${dev}" -prno RM)")))
+	return $isRemovable
 }
 
 function isVirtual(){
 	local dev="$1"
-	#if it's a link, follow it
-	dev=$(readlink -f "${dev}")
-
-	local dev_major=$((0x$(stat -c "%t" "${dev}")))
-	local dev_minor=$((0x$(stat -c "%T" "${dev}")))
+	IFS=":" read dev_major dev_minor <<< $(lsblk "${dev}" -prno MAJ:MIN)
 
 	if [ ! -d "/sys/dev/block/${dev_major}:${dev_minor}" ]; then
 		err_exit "Cannot find device in sysfs!\n"
@@ -47,7 +27,25 @@ function isVirtual(){
 }
 
 function get_part(){
-	err_exit "Temporarly removed"
+	local dev="$1"
+	local partno="$2"
+	local partitions=$(lsblk "${dev}" -prno KNAME)
+	if [ ! $? -eq 0 ]; then
+		$lred; echo "Device \"${dev}\" doesn't exist"; $normal
+		return 1
+	fi
+	local num_partitions=$(( $(echo "${partitions}" | wc -l) - 1 ))
+	if [ $num_partitions -lt 1 ]; then
+		err_exit "Device \"${dev}\" has no partitions\n"
+	fi
+
+	local part_dev=$(echo "${partitions}" | sed -n $((${partno} + 1))p)
+	if [ -z "${part_dev}" ]; then
+		return 1
+	fi
+
+	echo $part_dev
+	return 0
 }
 
 function vdev_check(){
