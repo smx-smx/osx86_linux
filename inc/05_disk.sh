@@ -36,7 +36,7 @@ function get_part(){
 	fi
 	local num_partitions=$(( $(echo "${partitions}" | wc -l) - 1 ))
 	if [ $num_partitions -lt 1 ]; then
-		err_exit "Device \"${dev}\" has no partitions\n"
+		return 1
 	fi
 
 	local part_dev=$(echo "${partitions}" | sed -n $((${partno} + 1))p)

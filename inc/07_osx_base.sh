@@ -179,7 +179,18 @@ function do_preptarget(){
 	else
 		partprobe "${G_DEV_TARGET}"
 	fi
-	sleep 1
+
+	for((i=0; i<5; i++)); do
+		get_part "${G_DEV_TARGET}" 1 && break
+		$lred; echo "Partition probe failed!, retrying ($(($i + 1)))"; $normal
+		sync
+		partprobe "${G_DEV_TARGET}"
+		sleep 1
+	done
+	
+	if [ $i -eq 5 ]; then
+		err_exit "Giving up\n"
+	fi
 
 	if is_on PART_GPT; then
 		G_DEV_ESP=$(get_part "${G_DEV_TARGET}" 1)
