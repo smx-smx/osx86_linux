@@ -107,6 +107,15 @@ function do_preptarget(){
 		usage
 		err_exit "You must specify the whole device, not a single partition!\n"
 	else #block device
+		if ! isRemovable "${G_DEV_TARGET}"; then
+			$lred; echo "WARNING, ${G_DEV_TARGET} IS NOT A REMOVABLE DEVICE!"
+			echo "ARE YOU SURE OF WHAT YOU ARE DOING?"
+			if ! read_yn "Are you REALLY sure you want to continue?"; then
+				err_exit "Exiting\n"
+			fi
+			$normal
+		fi
+
 		for part in ${G_DEV_TARGET}*[0-9]; do
 			echo "Part: $part"
 			if grep -q "$part" /proc/mounts; then
@@ -116,14 +125,6 @@ function do_preptarget(){
 				err_exit "Couldn't unmount ${part}\n"
 			fi
 		done
-		if ! isRemovable "${G_DEV_TARGET}"; then
-			$lred; echo "WARNING, ${G_DEV_TARGET} IS NOT A REMOVABLE DEVICE!"
-			echo "ARE YOU SURE OF WHAT YOU ARE DOING?"
-			if ! read_yn "Are you REALLY sure you want to continue?"; then
-				err_exit "Exiting\n"
-			fi
-			$normal
-		fi
 
 		$lred; echo "WARNING, ALL THE CONTENT OF ${G_DEV_TARGET} WILL BE LOST!"
 		if ! read_yn "Are you sure you want to continue?"; then
@@ -178,13 +179,16 @@ function do_preptarget(){
 	else
 		partprobe "${G_DEV_TARGET}"
 	fi
+	sleep 1
 
 	if is_on PART_GPT; then
 		G_DEV_ESP=$(get_part "${G_DEV_TARGET}" 1)
+		[ -z "${G_DEV_ESP}" ] && err_exit "Cannot find ESP partition\n"
 		G_DEV_TARGET=$(get_part "${G_DEV_TARGET}" 2)
 	else
 		G_DEV_TARGET=$(get_part "${G_DEV_TARGET}" 1)
 	fi
+	[ -z "${G_DEV_TARGET}" ] && err_exit "Cannot find Target partition\n"
 
 	if is_on PART_GPT; then
 		$lyellow; echo "Formatting ESP..."; $normal
@@ -196,7 +200,8 @@ function do_preptarget(){
 		fi
 	fi
 
-	$lyellow; echo "Formatting partition as HFS+..."; $normal
+	$lyellow; echo "Formatting ${G_DEV_TARGET} as HFS+..."; $normal
+
 	if ! mkfs.hfsplus "${G_DEV_TARGET}" -v "smx_installer"; then
 		err_exit "Error during ${G_NAME_TARGET} formatting\n"
 	fi
