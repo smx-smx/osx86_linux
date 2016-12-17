@@ -176,9 +176,8 @@ function do_preptarget(){
 		$lyellow; echo "Remapping ${G_OUT_ARG}..."; $normal
 		qemu_unmap 0
 		qemu_map 0 "${G_OUT_ARG}"
-	else
-		partprobe "${G_DEV_TARGET}"
 	fi
+	partprobe "${G_DEV_TARGET}"
 
 	for((i=0; i<5; i++)); do
 		get_part "${G_DEV_TARGET}" 1 && break
