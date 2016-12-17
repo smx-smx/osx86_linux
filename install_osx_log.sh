@@ -2,8 +2,8 @@
 source inc/[0-9]*colors.sh
 source inc/[0-9]*utils.sh
 
-export really_verbose=0
-export log_mode=1
+export G_REALLY_VERBOSE=0
+export G_LOG_MODE=1
 
 function initlog(){
 	logfile=`date +%d-%b-%y_%H%M%S`".log"

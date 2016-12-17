@@ -10,7 +10,7 @@ if [ -z $G_LOG_MODE ]; then
 fi
 
 if [ -z $G_REALLY_VERBOSE ]; then
-	G_REALLY_VERBOSE=1
+	G_REALLY_VERBOSE=0
 elif [ $G_REALLY_VERBOSE -eq 1 ]; then
 	G_VERBOSE="-v"
 fi
