@@ -1,14 +1,22 @@
 #!/bin/bash
+set -e
+
+err_report() {
+    echo "Error on line $1"
+}
+
+trap 'err_report $LINENO' ERR
+trap err_exit SIGINT
+
+
 # These 2 variables need to be defined before we include the rest
-G_WORKDIR=$(pwd -P)
-G_SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P)"
+G_WORKDIR="$(pwd -P)"
+G_SCRIPTDIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
 cd $G_SCRIPTDIR
 
 for i in $G_SCRIPTDIR/inc/*.sh; do
 	source "$i"
 done
-
-trap err_exit SIGINT
 
 function do_cleanup(){
 	local result
@@ -186,8 +194,8 @@ function main(){
 		exit 0
 	fi
 
-	G_IN_PATH="$( cd "$( dirname "${G_IN_ARG}" )" && pwd -P)"
-	G_OUT_PATH="$( cd "$( dirname "${G_OUT_ARG}" )" && pwd -P)"
+	G_IN_PATH="$(dirname "$(readlink -f "${G_IN_ARG}")")"
+	G_OUT_PATH="$(dirname "$(readlink -f "${G_OUT_ARG}")")"
 	
 	[ -z "${G_IN_PATH}" ] && err_exit "Cannot resolve absolute path for input \"${G_IN_ARG}\"\n"
 	[ -z "${G_OUT_PATH}" ] && err_exit "Cannot resolve absolute path for output \"${G_OUT_ARG}\"\n"
