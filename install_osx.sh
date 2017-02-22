@@ -184,12 +184,12 @@ function main(){
 		err_exit "Invalid dependencies, cannot continue!\n"
 	fi
 
-	if [ "$in_ext" == ".pkg" ] || [ "$in_ext" == ".mpkg" ]; then #./install_osx.sh [file.pkg/mpkg]
-		if [ -z "$out_arg" ]; then #no dest dir
+	if [ "${G_IN_EXT}" == ".pkg" ] || [ "${G_IN_EXT}" == ".mpkg" ]; then #./install_osx.sh [file.pkg/mpkg]
+		if [ -z "${G_OUT_ARG}" ]; then #no dest dir
 			usage
 			err_exit "Invalid Destination Folder\n"
 		fi
-		extract_pkg "$in_arg" "$out_arg"
+		extract_pkg "${G_IN_ARG}" "${G_OUT_ARG}"
 		do_cleanup
 		exit 0
 	fi
@@ -231,7 +231,7 @@ function main(){
 		[ -z "${G_OUT_ARG}" ] &&
 		[ -z "$3" ]
 	then #./install_osx.sh [dev]
-		dev_target="$in_arg"
+		dev_target="${G_IN_ARG}"
 		mediamenu
 	elif [ -f "${G_IN_ARG}" ] && [ -z "${G_OUT_ARG}" ] && [ -z "$3" ]; then #./install_osx.sh [file]
 		if [ "${G_IN_EXT}" == ".dmg" ]; then #./install_osx.sh [file.dmg]
@@ -309,10 +309,10 @@ function main(){
 
 	if [[ ${G_IN_ARG} == "/dev/sr[0-9]" ]]; then
 		$lgreen; echo "CD Source Device Detected"; $normal
-		if [ -z "$out_arg" ]; then
+		if [ -z "${G_OUT_ARG}" ]; then
 			err_exit "You must specify a valid destination to create an img file\n"
-		elif [ -f "$out_arg" ]; then
-			err_exit "$out_arg already exists\n"
+		elif [ -f "${G_OUT_ARG}" ]; then
+			err_exit "${G_OUT_ARG} already exists\n"
 		else
 			$yellow; echo "Image creation is in progress..."
 			echo "The process may take some time"; $normal

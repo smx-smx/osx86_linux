@@ -60,7 +60,7 @@ function extract_pkg(){
 	pushd "${dstpath}" &>/dev/null
 	if ! $xar -xf "${srcpath}"; then
 		popd &>/dev/null
-		$lred; echo "${pkgfile} extraction failed!"
+		$lred; echo "${pkgfile} extraction failed!"; $normal
 		return 1
 	fi
 
