@@ -35,21 +35,8 @@ function extract_pkg(){
 		err_exit "Xar missing or not enabled, cannot continue\n"
 	fi
 
-	local srcpath
-	local dstpath
-
-	# if it's a relative path
-	if [[ ! "$pkgfile" = /* ]]; then
-		srcpath="$(pwd -P)/${pkgfile}"
-	else
-		srcpath="${pkgfile}"
-	fi
-	# if it's a relative path
-	if [[ ! "$dest" = /* ]]; then
-		dstpath="$(pwd -P)/${dest}"
-	else
-		dstpath="${dest}"
-	fi
+	pkgfile="$(readlink -f "${pkgfile}")"
+	local dstpath="$(readlink -f "${dest}")"
 
 	if [ ! -d "$dstpath" ] && [ ! -e "$dstpath" ]; then
 		mkdir -p "$dstpath"
@@ -58,7 +45,7 @@ function extract_pkg(){
 	$yellow; echo "Extracting ${pkgfile} to ${dest}"; $normal
 
 	pushd "${dstpath}" &>/dev/null
-	if ! $xar -xf "${srcpath}"; then
+	if ! $xar -xf "${pkgfile}"; then
 		popd &>/dev/null
 		$lred; echo "${pkgfile} extraction failed!"; $normal
 		return 1

@@ -2,16 +2,19 @@
 set -e
 
 err_report() {
-    echo "Error on line $1"
+	local r=$?
+	if [ ! $r -eq 0 ]; then
+		$lred; echo "Error on $0:$1"; $normal
+	fi
+	exit $r
 }
 
-trap 'err_report $LINENO' ERR
+trap 'err_report "$LINENO"' ERR
 trap err_exit SIGINT
-
 
 # These 2 variables need to be defined before we include the rest
 G_WORKDIR="$(pwd -P)"
-G_SCRIPTDIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
+G_SCRIPTDIR="$( dirname "$( readlink -f "$0" )" )"
 cd $G_SCRIPTDIR
 
 for i in $G_SCRIPTDIR/inc/*.sh; do
