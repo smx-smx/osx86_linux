@@ -267,6 +267,7 @@ function qemu_map(){
 		eval "G_NBD${nbd_dev}_MAPPED=1"
 		sleep 0.1
 	fi
+	partprobe "${!nbd_devp}"
 	return $result
 }
 
