@@ -45,9 +45,11 @@ function detect_osx_version(){
 			G_OSNAME="Yosemite"
 		elif [[ "${G_OSVER}" =~ "10.11" ]]; then
 			G_OSNAME="El Capitan"
+		elif [[ "${G_OSVER}" =~ "10.12" ]]; then
+			G_OSNAME="Sierra"
 		elif [ ! -z "${G_OSVER}" ] && [ ! -z "${G_OSBUILD}" ]; then
 			G_OSNAME="Unsupported"
-			G_OSVER="version ($osver)"
+			G_OSVER="version ($G_OSVER)"
 			result=1
 		else
 			G_OSNAME="Unknown"
