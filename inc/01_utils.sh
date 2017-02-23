@@ -74,7 +74,6 @@ function isEmpty() {
 	fi
 }
 
-
 function str_contains(){
 	local string="$1"
 	local search="$2"
@@ -82,4 +81,18 @@ function str_contains(){
 		return 0
 	fi
 	return 1
+}
+
+function get_mime(){
+	local file="$1"
+	local out_mime="$2"
+	local out_charset="$3"
+	
+	local file_out="$(file -ib "${file}" | sed 's/$/;/g')" #append ; to end of line
+	local mime charset
+	read mime charset <<< "${file_out}"
+	charset="$(echo "${charset}" | cut -d '=' -f2)"
+
+	eval ${out_mime}="${mime}"
+	eval ${out_charset}="${charset}"
 }

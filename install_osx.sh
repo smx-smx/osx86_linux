@@ -42,7 +42,7 @@ function do_cleanup(){
 function cleanup() {
 	sync
 	if [ ! "${G_TMPDIR}" == "/tmp" ] && [ -d "${G_TMPDIR}" ]; then
-		rm -r "${G_TMPDIR}/*"
+		rm -r "${G_TMPDIR}"
 	fi
 
 	local result=0
@@ -116,19 +116,6 @@ function main(){
 
 	echo "Version: ${G_REV}"
 
-	if [ -z $SUDO_USER ]; then
-		export SUDO_USER="root"
-	fi
-
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${G_SCRIPTDIR}/bins/lib
-
-	check_commands	#check that all required commands exist
-	find_cmd "xar" "${G_SCRIPTDIR}/bins/bin"
-	find_cmd "dmg2img" "${G_SCRIPTDIR}/bins/bin"
-	find_cmd "pbzx" "${G_SCRIPTDIR}/bins/bin"
-	find_cmd "kconfig_mconf" "${G_SCRIPTDIR}/bins/bin" "kconfig-mconf"
-	find_cmd "mount_hfs" "${G_SCRIPTDIR}/bins/bin" "darling-dmg"
-
 	if [ $# == 0 ] ||
 	[ "$1" == "-h" ] ||
 	[ "$1" == "--help" ] ||
@@ -139,6 +126,23 @@ function main(){
 		$white; usage; $normal
 		err_exit ""
 	fi
+
+	if [ -z $SUDO_USER ]; then
+		export SUDO_USER="root"
+	fi
+
+	if [ ! -d "${G_TMPDIR}" ]; then
+		mkdir -p "${G_TMPDIR}"
+	fi
+
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${G_SCRIPTDIR}/bins/lib
+
+	check_commands	#check that all required commands exist
+	find_cmd "xar" "${G_SCRIPTDIR}/bins/bin"
+	find_cmd "dmg2img" "${G_SCRIPTDIR}/bins/bin"
+	find_cmd "pbzx" "${G_SCRIPTDIR}/bins/bin"
+	find_cmd "kconfig_mconf" "${G_SCRIPTDIR}/bins/bin" "kconfig-mconf"
+	find_cmd "mount_hfs" "${G_SCRIPTDIR}/bins/bin" "darling-dmg"
 
 	G_IN_ARG="$1"
 	G_OUT_ARG="$2"
@@ -167,7 +171,6 @@ function main(){
 	if is_on DEP_DARLING_DMG; then
 		docheck_darlingdmg
 	fi
-
 
 	$green
 	echo "== External Dependencies =="

@@ -221,10 +221,6 @@ function do_preptarget(){
 	if ! mount_part "${G_DEV_TARGET}" "${G_NAME_TARGET}"; then
 		err_exit "Cannot mount ${G_NAME_TARGET}\n"
 	fi
-
-	if [ ! -d "${G_MOUNTP_TARGET}/Extra" ]; then
-		mkdir ${G_VERBOSE} -p "${G_MOUNTP_TARGET}/Extra"
-	fi
 }
 
 function copy_progress(){
