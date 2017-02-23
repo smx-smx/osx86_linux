@@ -4,7 +4,10 @@ function do_kexts(){
 	if [ $kexts == 0 ]; then
 		$lred; echo "No kext to install"; $normal
 	else
-		$ylellow; echo "Installing kexts in \"extra_kexts\" directory"; $normal
+		if [ ! -d "${G_MOUNTP_TARGET}/Extra/Extensions" ]; then
+			mkdir ${G_VERBOSE} -p "${G_MOUNTP_TARGET}/Extra/Extensions"
+		fi
+		$lyellow; echo "Installing kexts in \"extra_kexts\" directory"; $normal
 		for kext in ${G_KEXTDIR}/*.kext; do
 			echo " Installing $(basename $kext)..."
 			cp -R ${G_VERBOSE} "$kext" /mnt/osx/target/Extra/Extensions/
