@@ -66,12 +66,8 @@ function err_exit() {
 }
 
 function isEmpty() {
-	local dir=$1
-	if [ $(( $(ls -a1 "${dir}" | wc -l) - 2)) -eq 0 ]; then
-		return 0 #good, it's empty
-	else
-		return 1 #bad, not empty
-	fi
+	local dir="$1"
+	[ "$(ls -A "${dir}")" ] && return 1 || return 0 #error on not empty
 }
 
 function str_contains(){
